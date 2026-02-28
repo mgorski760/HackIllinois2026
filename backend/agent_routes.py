@@ -1,11 +1,12 @@
 import uuid
 from datetime import datetime, timezone, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from googleapiclient.errors import HttpError
 
-from auth import get_access_token
+from auth import GoogleUser, get_access_token, get_google_user
 from calendar_service import (
     get_calendar_service,
     list_events,
@@ -32,6 +33,7 @@ router = APIRouter(prefix="/agent", tags=["agent"])
 class AgentRequest(BaseModel):
     """Request to the calendar agent."""
     prompt: str
+    timezone: str | None = None
 
 
 class ActionResult(BaseModel):
@@ -69,11 +71,25 @@ def handle_google_error(e: HttpError) -> str:
     else:
         return f"Google Calendar error: {e.reason}"
 
+def resolve_user_datetime(request_timezone: str | None) -> tuple[datetime, str]:
+    """Return the user's current datetime and the resolved timezone label."""
+    tzinfo = timezone.utc
+    tz_label = "UTC"
+
+    if request_timezone:
+        try:
+            tzinfo = ZoneInfo(request_timezone)
+            tz_label = request_timezone
+        except Exception:
+            tzinfo = timezone.utc
+    
+    return datetime.now(tzinfo), tz_label
+
 
 @router.post("/chat", response_model=AgentResponse)
 async def chat_with_agent(
     request: AgentRequest,
-    access_token: str = Depends(get_access_token),
+    google_user: GoogleUser = Depends(get_google_user),
 ):
     """
     Send a natural language request to the calendar agent.
@@ -87,6 +103,9 @@ async def chat_with_agent(
     - "Move my dentist appointment to Friday"
     - "Cancel my 2pm meeting today"
     """
+    access_token = google_user.access_token
+    user_datetime, resolved_timezone = resolve_user_datetime(request.timezone)
+
     # First, fetch existing events to give LLM context for updates/deletes
     service = get_calendar_service(access_token)
     
@@ -102,8 +121,14 @@ async def chat_with_agent(
         existing_events = []  # Continue without context if fetch fails
     
     try:
-        # Get actions from LLM with event context
-        llm_response = await get_calendar_actions(request.prompt, events_context=existing_events)
+        # Get actions from LLM with event context and user metadata
+        llm_response = await get_calendar_actions(
+            request.prompt,
+            events_context=existing_events,
+            user_email=google_user.email,
+            user_datetime=user_datetime,
+            user_timezone=resolved_timezone,
+        )
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

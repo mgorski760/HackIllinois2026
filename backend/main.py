@@ -1,6 +1,8 @@
 from fastapi import FastAPI
+from fastapi import Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+from auth import GoogleUser, get_google_user
 
 from calendar_routes import router as calendar_router
 from agent_routes import router as agent_router
@@ -39,3 +41,6 @@ async def store_prompt(request: PromptRequest):
 async def get_prompt():
     return {"prompt": current_prompt}
 
+@app.get("/debug/me")
+async def who_am_i(user: GoogleUser = Depends(get_google_user)):
+    return {"email": user.email}
