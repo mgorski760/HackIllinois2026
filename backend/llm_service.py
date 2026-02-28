@@ -6,6 +6,7 @@ from typing import Optional
 from dotenv import load_dotenv
 
 from llm_models import LLMResponse, CALENDAR_SYSTEM_PROMPT
+from user_context import build_user_context
 
 load_dotenv()
 
@@ -36,7 +37,15 @@ def format_events_context(events: list[dict]) -> str:
     return "\n".join(lines)
 
 
-async def call_vllm(prompt: str, events_context: Optional[list[dict]] = None, max_tokens: int = 2048) -> str:
+async def call_vllm(
+    prompt: str,
+    events_context: Optional[list[dict]] = None,
+    *,
+    user_email: Optional[str] = None,
+    user_datetime: Optional[datetime] = None,
+    user_timezone: Optional[str] = None,
+    max_tokens: int = 2048,
+) -> str:
     """
     Call the vLLM server and get a completion.
     
@@ -52,6 +61,20 @@ async def call_vllm(prompt: str, events_context: Optional[list[dict]] = None, ma
     
     # Build context with events if provided
     context_parts = [f"Current datetime: {current_time}"]
+
+    if user_timezone:
+        context_parts.append(f"User timezone: {user_timezone}")
+    if user_datetime:
+        context_parts.append(f"User local datetime: {user_datetime.isoformat()}")
+
+    if user_email and user_datetime:
+        try:
+            internal_context = build_user_context(user_email, user_datetime)
+        except Exception:
+            internal_context = None
+        if internal_context:
+            context_parts.append("User-specific context:")
+            context_parts.append(internal_context)
     
     if events_context:
         context_parts.append(format_events_context(events_context))
@@ -116,7 +139,14 @@ def parse_llm_response(response_text: str) -> LLMResponse:
         raise ValueError(f"Failed to validate LLM response: {e}\nResponse: {response_text}")
 
 
-async def get_calendar_actions(prompt: str, events_context: Optional[list[dict]] = None) -> LLMResponse:
+async def get_calendar_actions(
+    prompt: str,
+    events_context: Optional[list[dict]] = None,
+    *,
+    user_email: Optional[str] = None,
+    user_datetime: Optional[datetime] = None,
+    user_timezone: Optional[str] = None,
+) -> LLMResponse:
     """
     Get calendar actions from the LLM based on user prompt.
     
@@ -127,5 +157,11 @@ async def get_calendar_actions(prompt: str, events_context: Optional[list[dict]]
     Returns:
         Parsed LLMResponse with actions to execute
     """
-    response_text = await call_vllm(prompt, events_context=events_context)
+    response_text = await call_vllm(
+        prompt,
+        events_context=events_context,
+        user_email=user_email,
+        user_datetime=user_datetime,
+        user_timezone=user_timezone,
+    )
     return parse_llm_response(response_text)
