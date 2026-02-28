@@ -93,6 +93,7 @@ struct ContentView: View {
                 .glassEffect(.regular.tint(.blue))
                 .buttonBorderShape(.circle)
                 .clipShape(.circle)
+                .disabled(viewModel.isRunning || isTranscribing)
             }
             .padding()
         }
