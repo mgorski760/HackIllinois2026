@@ -96,6 +96,18 @@ Configuration (from .env):
   - VLLM_MODEL_NAME: Model identifier
 
 --------------------------------------------------------------------------------
+user_context.py - User-Specific Context Hook
+--------------------------------------------------------------------------------
+Purpose: Provides a single function (`build_user_context`) for injecting
+user/email-aware context into the LLM prompt.
+
+Key Details:
+  - Accepts Google OAuth email + user-local datetime (based on request timezone)
+  - Default implementation simply echoes those values for debugging
+  - Replace the placeholder with calls to your key-value store or
+    proprietary systems (e.g., `TODO.add(email, current_date)`)
+
+--------------------------------------------------------------------------------
 agent_routes.py - AI Agent Endpoints
 --------------------------------------------------------------------------------
 Purpose: Natural language interface for calendar operations.
@@ -196,7 +208,8 @@ POST /agent/chat
   Description: Send natural language request to calendar AI agent
   Request Body:
     {
-      "prompt": "Schedule a meeting tomorrow at 3pm for 1 hour"
+      "prompt": "Schedule a meeting tomorrow at 3pm for 1 hour",
+      "timezone": "America/Chicago"   // optional IANA timezone used for user context
     }
   Response: AgentResponse
     {
@@ -214,10 +227,12 @@ POST /agent/chat
   
   How it works:
     1. Fetches user's events (past 7 days to next 60 days) for context
-    2. Sends prompt + events to vLLM
-    3. LLM returns structured JSON actions
-    4. Executes each action on Google Calendar
-    5. Stores reversible actions in history for undo
+    2. Resolves the caller's current local datetime (based on `timezone`) and
+       adds user-specific context from `user_context.py`
+    3. Sends prompt + metadata + events to vLLM
+    4. LLM returns structured JSON actions
+    5. Executes each action on Google Calendar
+    6. Stores reversible actions in history for undo
 
 POST /agent/undo
   Description: Undo the last calendar action
@@ -375,3 +390,5 @@ Key Packages (requirements.txt):
   - modal: Serverless GPU deployment
 
 ================================================================================
+
+
