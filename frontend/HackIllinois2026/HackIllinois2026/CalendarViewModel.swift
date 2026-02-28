@@ -23,7 +23,13 @@ final class CalendarViewModel {
 
     private var session = LanguageModelSession(
         tools: [CalendarTool()],
-        instructions: "You are a helpful calendar assistant. Help the user manage and query their calendar events. Break down the user's requests into steps and call the appropriate tools to get the information needed to fulfill the request. Always use the provided tools for any calendar-related operations."
+        instructions: """
+        You are a helpful calendar assistant. Help the user manage and query their calendar events. \
+        Break down the user's requests into steps and call the appropriate tools to get the information needed to fulfill the request. \
+        Always use the provided tools for any calendar-related operations. \
+        IMPORTANT: When the user asks you to create multiple events, you MUST make a separate 'create' tool call for EACH individual event. \
+        Do NOT try to combine multiple events into a single tool call. Call the tool once per event, one after another.
+        """
     )
 
     // MARK: - Prewarm
@@ -110,6 +116,7 @@ final class CalendarViewModel {
 
     /// Shared helper: wraps a prompt with contextual date info, monitors the
     /// session transcript for tool activity, sends the prompt, and handles errors.
+    /// Uses the streaming API to support multiple sequential tool calls.
     private func respondToPrompt(_ userPrompt: String) async {
         agentActivity = []
         isRunning = true
@@ -123,13 +130,16 @@ final class CalendarViewModel {
         \(userPrompt)
         """
 
+        let initialTranscriptCount = session.transcript.count
+
+        // Monitor the transcript for tool-call activity in the background.
         let transcriptTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            var seenCount = 0
+            var seenCount = initialTranscriptCount
             while !Task.isCancelled {
                 let entries = session.transcript
                 if entries.count > seenCount {
-                    for entry in entries[seenCount...] {
+                    for entry in entries[seenCount..<entries.count] {
                         switch entry {
                         case .toolCalls(let calls):
                             for call in calls {
@@ -149,22 +159,25 @@ final class CalendarViewModel {
                     }
                     seenCount = entries.count
                 }
-                try? await Task.sleep(for: .milliseconds(100))
+                try await Task.sleep(for: .milliseconds(200))
             }
         }
 
         do {
-            let response = try await session.respond(to: Prompt(contextualPrompt))
-            transcriptTask.cancel()
-            messages.append(CalendarMessage(role: .assistant, content: response.content))
+            var finalText = ""
+            let stream = session.streamResponse(to: contextualPrompt)
+            for try await partial in stream {
+                finalText = partial.content
+            }
+            messages.append(CalendarMessage(role: .assistant, content: finalText))
         } catch {
-            transcriptTask.cancel()
             messages.append(CalendarMessage(
                 role: .assistant,
                 content: "Sorry, something went wrong: \(error.localizedDescription)"
             ))
         }
 
+        transcriptTask.cancel()
         agentActivity = []
         isRunning = false
     }
