@@ -8,12 +8,21 @@
 import SwiftUI
 
 struct ContentView: View {
+    @State private var currentPrompt: String = ""
+    
     var body: some View {
-        VStack {
-            Image(systemName: "globe")
-                .imageScale(.large)
-                .foregroundStyle(.tint)
-            Text("Hello, world!")
+        ScrollView {
+            
+        }
+        .safeAreaBar(edge: .top) {
+            RoundedRectangle(cornerRadius: 40, style: .continuous)
+                .foregroundStyle(.tertiary.opacity(0.5))
+                .frame(height: 240)
+                .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 40))
+        }
+        .safeAreaBar(edge: .bottom) {
+            TextField("Ask whatever you'd like", text: $currentPrompt, axis: .vertical)
+                .textFieldStyle(.glass)
         }
         .padding()
     }
