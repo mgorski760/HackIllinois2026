@@ -16,6 +16,7 @@ struct ContentView: View {
     @State private var isShowingImagePicker: Bool = false
     @State private var photosPickerItem: PhotosPickerItem?
     @State private var isFileImporterPresented: Bool = false
+    @State private var isShowingCamera: Bool = false
     
     var body: some View {
         NavigationStack {
@@ -48,7 +49,7 @@ struct ContentView: View {
                     }
                     
                     Button("Camera", systemImage: "camera") {
-                        // Handle camera action
+                        isShowingCamera = true
                     }
                     
                     Button("Upload from files", systemImage: "folder") {
@@ -97,6 +98,13 @@ struct ContentView: View {
                 }
             case .failure(let error):
                 print("File import failed with error: \(error.localizedDescription)")
+            }
+        }
+        .fullScreenCover(isPresented: $isShowingCamera) {
+            CameraCaptureView { image in
+                Task {
+                    await viewModel.send(image: image)
+                }
             }
         }
     }
