@@ -44,6 +44,7 @@ public struct LiveTranscriptionButton: View {
             label
         }
         .buttonStyle(.glassProminent)
+        .buttonBorderShape(.circle)
         .tint(background)
         .disabled(vm.state.isPreparing)
         .animation(.easeInOut(duration: 0.2), value: vm.state.isRecording)
