@@ -1,0 +1,377 @@
+================================================================================
+                    HackIllinois2026 Backend Documentation
+================================================================================
+
+Project: AI-Powered Google Calendar Assistant
+Framework: FastAPI + Modal (vLLM) + Google Calendar API
+
+================================================================================
+                              FILE DESCRIPTIONS
+================================================================================
+
+--------------------------------------------------------------------------------
+main.py - Application Entry Point
+--------------------------------------------------------------------------------
+Purpose: Initializes the FastAPI application and configures middleware.
+
+Key Components:
+  - Creates FastAPI app instance with title "HackIllinois2026 API"
+  - Includes calendar_router (/calendar/*) and agent_router (/agent/*)
+  - Configures CORS middleware (allows all origins for development)
+  - Legacy /prompt endpoints for basic prompt storage
+
+--------------------------------------------------------------------------------
+auth.py - Authentication Handler
+--------------------------------------------------------------------------------
+Purpose: Extracts and validates Google OAuth access tokens from requests.
+
+Key Components:
+  - HTTPBearer security scheme (creates "Authorize" button in Swagger UI)
+  - get_access_token() dependency - extracts Bearer token from Authorization header
+
+Usage: Add `access_token: str = Depends(get_access_token)` to any endpoint
+
+--------------------------------------------------------------------------------
+models.py - Pydantic Data Models (Calendar)
+--------------------------------------------------------------------------------
+Purpose: Defines request/response schemas for calendar operations.
+
+Models:
+  - EventDateTime: DateTime object with dateTime and timeZone fields
+  - EventCreate: Request body for creating events (summary, start, end, etc.)
+  - EventUpdate: Request body for updating events (all fields optional)
+  - EventResponse: Response format for calendar events
+  - EventListResponse: Wrapper for list of events with pagination token
+
+--------------------------------------------------------------------------------
+calendar_service.py - Google Calendar API Wrapper
+--------------------------------------------------------------------------------
+Purpose: Low-level functions for interacting with Google Calendar API.
+
+Functions:
+  - get_calendar_service(access_token) -> Builds authenticated Calendar service
+  - list_events(service, ...) -> Lists events with time range filtering
+  - get_event(service, event_id) -> Gets single event by ID
+  - create_event(service, event_data) -> Creates new event
+  - update_event(service, event_id, event_data) -> Updates existing event
+  - delete_event(service, event_id) -> Deletes event
+
+--------------------------------------------------------------------------------
+calendar_routes.py - Calendar REST API Endpoints
+--------------------------------------------------------------------------------
+Purpose: HTTP endpoints for direct calendar CRUD operations.
+
+(See API ENDPOINTS section below for full details)
+
+--------------------------------------------------------------------------------
+llm_models.py - LLM Response Models + System Prompt
+--------------------------------------------------------------------------------
+Purpose: Defines the JSON structure the LLM must output.
+
+Action Models:
+  - CreateEventAction: {action: "create", summary, start_datetime, end_datetime, ...}
+  - UpdateEventAction: {action: "update", event_id, summary, ...}
+  - DeleteEventAction: {action: "delete", event_id}
+  - ListEventsAction: {action: "list", time_min, time_max, max_results}
+  - GetEventAction: {action: "get", event_id}
+
+LLMResponse: {reasoning, actions[], message}
+
+CALENDAR_SYSTEM_PROMPT: Instructions telling the LLM how to interpret requests
+                        and format JSON responses.
+
+--------------------------------------------------------------------------------
+llm_service.py - vLLM Communication Layer
+--------------------------------------------------------------------------------
+Purpose: Handles communication with the Modal-hosted vLLM server.
+
+Functions:
+  - format_events_context(events) -> Formats events list for LLM context
+  - call_vllm(prompt, events_context) -> Sends request to vLLM endpoint
+  - parse_llm_response(response_text) -> Parses JSON from LLM output
+  - get_calendar_actions(prompt, events_context) -> Main entry point
+
+Configuration (from .env):
+  - VLLM_URL: Modal vLLM endpoint URL
+  - VLLM_MODEL_NAME: Model identifier
+
+--------------------------------------------------------------------------------
+agent_routes.py - AI Agent Endpoints
+--------------------------------------------------------------------------------
+Purpose: Natural language interface for calendar operations.
+
+(See API ENDPOINTS section below for full details)
+
+--------------------------------------------------------------------------------
+action_history.py - Undo System
+--------------------------------------------------------------------------------
+Purpose: Stores action history for rollback/undo functionality.
+
+Classes:
+  - ActionRecord: Single action with id, timestamp, action_type, event_id, 
+                  rollback_data, rolled_back flag
+  - ActionHistory: In-memory storage keyed by user token
+    - add(token, record): Store new action
+    - get_last(token): Get most recent undoable action
+    - mark_rolled_back(token, action_id): Mark action as undone
+    - get_history(token, limit): Get recent actions
+
+Global: action_history = ActionHistory()
+
+--------------------------------------------------------------------------------
+vLLM.py - Modal Deployment Script
+--------------------------------------------------------------------------------
+Purpose: Deploys vLLM inference server to Modal (serverless GPU).
+
+Configuration:
+  - MODEL_NAME: HuggingFace model ID (e.g., "Qwen/Qwen3-4B-Thinking-2507-FP8")
+  - GPU: H100 (configurable)
+  - Volumes: Caches for HuggingFace and vLLM
+  - Timeout: 10 minutes startup, 15 minute scaledown
+
+Deploy Command: modal deploy vLLM.py
+
+
+================================================================================
+                              API ENDPOINTS
+================================================================================
+
+All endpoints require Authorization header: "Bearer <google_access_token>"
+Base URL: http://localhost:8002 (development)
+
+--------------------------------------------------------------------------------
+CALENDAR ENDPOINTS (Direct CRUD)
+--------------------------------------------------------------------------------
+
+GET /calendar/events
+  Description: List events from user's primary Google Calendar
+  Query Parameters:
+    - time_min (optional): Start time filter (RFC3339 format)
+    - time_max (optional): End time filter (RFC3339 format)
+    - max_results (default: 100): Maximum events to return (1-2500)
+    - page_token (optional): Pagination token
+  Response: EventListResponse {events: [], nextPageToken}
+
+GET /calendar/events/{event_id}
+  Description: Get a single event by ID
+  Path Parameters:
+    - event_id: Google Calendar event ID
+  Response: EventResponse
+
+POST /calendar/events
+  Description: Create a new calendar event
+  Request Body: EventCreate
+    {
+      "summary": "Meeting Title",
+      "start": {"dateTime": "2026-03-01T10:00:00-06:00", "timeZone": "America/Chicago"},
+      "end": {"dateTime": "2026-03-01T11:00:00-06:00", "timeZone": "America/Chicago"},
+      "description": "Optional",
+      "location": "Optional"
+    }
+  Response: EventResponse (201 Created)
+
+PUT /calendar/events/{event_id}
+  Description: Update an existing event (partial update supported)
+  Path Parameters:
+    - event_id: Google Calendar event ID
+  Request Body: EventUpdate (all fields optional)
+  Response: EventResponse
+
+DELETE /calendar/events/{event_id}
+  Description: Delete an event
+  Path Parameters:
+    - event_id: Google Calendar event ID
+  Response: 204 No Content
+
+GET /calendar/debug/raw
+  Description: Debug endpoint - returns raw Google Calendar API response
+  Query Parameters: time_min, time_max, max_results
+  Response: Raw Google API JSON
+
+--------------------------------------------------------------------------------
+AGENT ENDPOINTS (AI-Powered)
+--------------------------------------------------------------------------------
+
+POST /agent/chat
+  Description: Send natural language request to calendar AI agent
+  Request Body:
+    {
+      "prompt": "Schedule a meeting tomorrow at 3pm for 1 hour"
+    }
+  Response: AgentResponse
+    {
+      "message": "I've scheduled your meeting for tomorrow at 3pm.",
+      "reasoning": "User wants to create a 1-hour meeting...",
+      "results": [
+        {
+          "action": "create",
+          "success": true,
+          "can_undo": true,
+          "data": {...event details...}
+        }
+      ]
+    }
+  
+  How it works:
+    1. Fetches user's events (past 7 days to next 60 days) for context
+    2. Sends prompt + events to vLLM
+    3. LLM returns structured JSON actions
+    4. Executes each action on Google Calendar
+    5. Stores reversible actions in history for undo
+
+POST /agent/undo
+  Description: Undo the last calendar action
+  Response: UndoResponse
+    {
+      "success": true,
+      "message": "Undone: deleted the created event",
+      "undone_action": "create",
+      "data": {"deleted_event_id": "abc123"}
+    }
+  
+  Undo behaviors:
+    - CREATE action -> Deletes the created event
+    - UPDATE action -> Restores original event data
+    - DELETE action -> Re-creates the event (with new ID)
+
+GET /agent/history
+  Description: View recent action history
+  Query Parameters:
+    - limit (default: 10): Number of actions to return
+  Response:
+    {
+      "actions": [
+        {
+          "id": "uuid",
+          "timestamp": "2026-02-28T...",
+          "action_type": "create",
+          "event_id": "abc123",
+          "rolled_back": false
+        }
+      ]
+    }
+
+--------------------------------------------------------------------------------
+LEGACY ENDPOINTS
+--------------------------------------------------------------------------------
+
+POST /prompt
+  Description: Store a prompt string (legacy, not used by agent)
+  Request Body: {"prompt": "string"}
+  Response: {"status": "success", "received": "string"}
+
+GET /prompt
+  Description: Retrieve stored prompt
+  Response: {"prompt": "string"}
+
+
+================================================================================
+                              ARCHITECTURE FLOW
+================================================================================
+
+User Request Flow (Agent):
+  
+  iOS App
+     |
+     | POST /agent/chat {"prompt": "Delete my 3pm meeting"}
+     v
+  FastAPI (agent_routes.py)
+     |
+     | 1. get_access_token() - validate auth
+     | 2. list_events() - fetch existing events for context
+     v
+  llm_service.py
+     |
+     | 3. format_events_context() - prepare event list
+     | 4. call_vllm() - send to Modal
+     v
+  Modal vLLM Server
+     |
+     | 5. LLM processes with CALENDAR_SYSTEM_PROMPT
+     | 6. Returns JSON: {"actions": [{"action": "delete", "event_id": "xyz"}]}
+     v
+  llm_service.py
+     |
+     | 7. parse_llm_response() - validate JSON structure
+     v
+  FastAPI (agent_routes.py)
+     |
+     | 8. Execute actions via calendar_service.py
+     | 9. Store in action_history (for undo)
+     v
+  Google Calendar API
+     |
+     | 10. Performs actual calendar operations
+     v
+  Response to iOS App
+
+
+================================================================================
+                              CONFIGURATION
+================================================================================
+
+.env File:
+  VLLM_URL=https://username--vllm-serve.modal.run
+  VLLM_MODEL_NAME=Qwen/Qwen3-4B-Thinking-2507-FP8
+
+Google Cloud Console Setup:
+  1. Enable Google Calendar API
+  2. Configure OAuth consent screen with calendar scope
+  3. Create iOS OAuth client ID (Bundle ID: com.omchachad.HackIllinois2026)
+
+OAuth Scope Required:
+  https://www.googleapis.com/auth/calendar
+
+
+================================================================================
+                              ERROR HANDLING
+================================================================================
+
+HTTP Status Codes:
+  200 - Success
+  201 - Created (POST /calendar/events)
+  204 - No Content (DELETE)
+  401 - Unauthorized (invalid/expired token)
+  403 - Forbidden (insufficient permissions)
+  404 - Not Found (event doesn't exist)
+  422 - Unprocessable Entity (LLM parsing failed)
+  502 - Bad Gateway (vLLM communication error)
+  500 - Internal Server Error
+
+
+================================================================================
+                              TESTING
+================================================================================
+
+1. Get OAuth Token:
+   - Go to https://developers.google.com/oauthplayground/
+   - Select "Google Calendar API v3" -> calendar scope
+   - Authorize and exchange for access token
+
+2. Test via Swagger UI:
+   - Open http://localhost:8002/docs
+   - Click "Authorize" button, paste token
+   - Test endpoints interactively
+
+3. Test via curl:
+   TOKEN="ya29.xxx..."
+   curl -X POST "http://localhost:8002/agent/chat" \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"prompt": "What meetings do I have tomorrow?"}'
+
+
+================================================================================
+                              DEPENDENCIES
+================================================================================
+
+Key Packages (requirements.txt):
+  - fastapi, uvicorn: Web framework
+  - google-api-python-client: Google Calendar API
+  - google-auth, google-auth-oauthlib: OAuth handling
+  - httpx: Async HTTP client (for vLLM calls)
+  - pydantic: Data validation
+  - python-dotenv: Environment variables
+  - modal: Serverless GPU deployment
+
+================================================================================
