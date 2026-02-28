@@ -5,14 +5,6 @@
 //  Created by Om Chachad on 28/02/26.
 //
 
-
-//
-//  CalendarViewModel.swift
-//  HackIllinois2026
-//
-//  Created by Om Chachad on 28/02/26.
-//
-
 import SwiftUI
 import FoundationModels
 

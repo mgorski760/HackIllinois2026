@@ -11,7 +11,6 @@ import FoundationModels
 struct ContentView: View {
     @State private var viewModel = CalendarViewModel()
     @State private var currentPrompt: String = ""
-    //@Sta/*te private var session = LanguageModelSession(model: .default, tools: [CalendarTool()])*/
     
     var body: some View {
         NavigationStack {
@@ -43,6 +42,3 @@ struct ContentView: View {
 #Preview {
     ContentView()
 }
-
-
-

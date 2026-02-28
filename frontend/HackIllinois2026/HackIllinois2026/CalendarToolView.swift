@@ -27,9 +27,6 @@ struct CalendarToolView: View {
     // Injected from the parent — the parent owns the view model's lifetime.
     var viewModel: CalendarViewModel
 
-    @State private var inputText: String = ""
-    @FocusState private var inputFocused: Bool
-
     var body: some View {
         messageList
             .navigationBarTitleDisplayMode(.inline)
@@ -106,61 +103,6 @@ struct CalendarToolView: View {
         }
     }
 
-    // MARK: - Input Bar
-
-    private var inputBar: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            ZStack(alignment: .leading) {
-                if inputText.isEmpty {
-                    Text("Ask about your calendar...")
-                        .font(.body)
-                        .foregroundStyle(.tertiary)
-                        .allowsHitTesting(false)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 10)
-                }
-                TextEditor(text: $inputText)
-                    .font(.body)
-                    .scrollContentBackground(.hidden)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 6)
-                    .frame(minHeight: 38, maxHeight: 120)
-                    .focused($inputFocused)
-            }
-            .background(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .fill(Color(.secondarySystemGroupedBackground))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .strokeBorder(
-                        inputFocused ? Color.blue.opacity(0.5) : Color.clear,
-                        lineWidth: 1.5
-                    )
-            )
-            .animation(.easeInOut(duration: 0.15), value: inputFocused)
-
-            Button {
-                let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
-                guard !text.isEmpty else { return }
-                inputText = ""
-                Task { await viewModel.send(prompt: text) }
-            } label: {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 32))
-                    .foregroundStyle(canSend ? Color.blue : Color(.tertiaryLabel))
-            }
-            .buttonStyle(.plain)
-            .disabled(!canSend)
-            .animation(.easeInOut(duration: 0.15), value: canSend)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-    }
-
-    private var canSend: Bool {
-        !inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !viewModel.isRunning
-    }
 }
 
 // MARK: - Preview
