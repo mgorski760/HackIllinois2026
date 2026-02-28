@@ -170,8 +170,13 @@ struct TimelinePageView: View {
     @Binding var selectedDate: Date
     @EnvironmentObject var manager: EventKitManager
 
-    @State private var pageIndex: Int = 0
-    private let anchor = Date()
+    // We keep a separate anchor so we can silently shift it without jarring the UI.
+    @State private var anchor: Date = Date()
+    // 5-page window: indices 0…4, centre = 2. Gives two buffer pages on each side
+    // so the swipe animation finishes inside the existing TabView before we re-centre.
+    @State private var tab: Int = 2
+    private let centre = 2
+    @State private var isResetting = false
 
     // Zoom state — shared across all day pages so pinch feels global
     @State private var hourHeight: CGFloat = 20
@@ -179,13 +184,16 @@ struct TimelinePageView: View {
     private let minHourHeight: CGFloat = 10
     private let maxHourHeight: CGFloat = 160
 
+    private func dateForIndex(_ index: Int) -> Date {
+        Calendar.current.date(byAdding: .day, value: index - centre, to: anchor)!
+    }
+
     var body: some View {
-        TabView(selection: $pageIndex) {
-            ForEach(-365...365, id: \.self) { offset in
-                let date = Calendar.current.date(byAdding: .day, value: offset, to: anchor)!
-                TimelineDayView(date: date, hourHeight: hourHeight)
+        TabView(selection: $tab) {
+            ForEach(0..<5, id: \.self) { index in
+                TimelineDayView(date: dateForIndex(index), hourHeight: hourHeight)
                     .environmentObject(manager)
-                    .tag(offset)
+                    .tag(index)
                     .simultaneousGesture(
                         MagnificationGesture()
                             .onChanged { scale in
@@ -201,15 +209,33 @@ struct TimelinePageView: View {
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         .contentShape(Rectangle())
-        .onChange(of: pageIndex) { _, newVal in
-            selectedDate = Calendar.current.date(byAdding: .day, value: newVal, to: anchor) ?? anchor
+        .onChange(of: tab) { _, newTab in
+            guard !isResetting else { return }
+            // Update selectedDate to match the page the user swiped to
+            selectedDate = dateForIndex(newTab)
+
+            // If we're still near the centre, no need to re-anchor yet
+            guard newTab != centre else { return }
+            isResetting = true
+            // Wait for the page-turn animation to fully settle
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                // Shift anchor so the current page becomes the centre again
+                let offset = newTab - centre
+                anchor = Calendar.current.date(byAdding: .day, value: offset, to: anchor)!
+                tab = centre
+                isResetting = false
+            }
         }
         .onChange(of: selectedDate) { _, newDate in
+            // External date change (e.g. from the header picker) — re-anchor immediately
             let diff = Calendar.current.dateComponents([.day], from: anchor, to: newDate).day ?? 0
-            if diff != pageIndex { pageIndex = diff }
+            guard diff != tab - centre else { return }
+            anchor = newDate
+            tab = centre
         }
         .onAppear {
-            pageIndex = Calendar.current.dateComponents([.day], from: anchor, to: selectedDate).day ?? 0
+            anchor = selectedDate
+            tab = centre
         }
     }
 }
