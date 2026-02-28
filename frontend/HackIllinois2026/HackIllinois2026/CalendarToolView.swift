@@ -87,7 +87,11 @@ struct CalendarToolView: View {
                                         AgentActivityRow(event: event)
                                             .transition(.move(edge: .bottom).combined(with: .opacity))
                                     }
-                                    TypingIndicator()
+                                    if !viewModel.streamingContent.isEmpty {
+                                        StreamingBubble(text: viewModel.streamingContent)
+                                    } else {
+                                        TypingIndicator()
+                                    }
                                 }
                                 .id("typing")
                                 .animation(.easeOut(duration: 0.2), value: viewModel.agentActivity.count)
@@ -111,6 +115,9 @@ struct CalendarToolView: View {
                 if running {
                     withAnimation { proxy.scrollTo("typing", anchor: .bottom) }
                 }
+            }
+            .onChange(of: viewModel.streamingContent) { _, _ in
+                proxy.scrollTo("typing", anchor: .bottom)
             }
         }
     }
@@ -244,5 +251,29 @@ struct TypingIndicator: View {
         }
         .padding(.vertical, 2)
         .onAppear { phase = 1 }
+    }
+}
+
+// MARK: - Streaming Bubble
+
+struct StreamingBubble: View {
+    let text: String
+
+    var formattedContent: AttributedString {
+        (try? AttributedString(markdown: text)) ?? AttributedString(text)
+    }
+
+    var body: some View {
+        HStack {
+            Text(formattedContent)
+                .font(.system(size: 15))
+                .foregroundStyle(.primary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .glassEffect(.regular.tint(Color(.secondarySystemGroupedBackground)), in: .rect(cornerRadius: 18, style: .continuous))
+
+            Spacer(minLength: 48)
+        }
+        .padding(.vertical, 2)
     }
 }

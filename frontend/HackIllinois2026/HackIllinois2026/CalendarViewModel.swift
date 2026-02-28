@@ -18,6 +18,7 @@ final class CalendarViewModel {
     private(set) var messages: [CalendarMessage] = []
     private(set) var agentActivity: [AgentActivityEvent] = []
     private(set) var isRunning = false
+    private(set) var streamingContent: String = ""
 
     // MARK: - Private
 
@@ -47,7 +48,7 @@ final class CalendarViewModel {
         messages.append(CalendarMessage(role: .user, content: trimmed))
         await respondToPrompt(trimmed)
     }
-
+    
     func send(image: UIImage) async {
         guard let cgImage = image.cgImage else { return }
 
@@ -165,12 +166,19 @@ final class CalendarViewModel {
 
         do {
             var finalText = ""
+            streamingContent = ""
             let stream = session.streamResponse(to: contextualPrompt)
             for try await partial in stream {
                 finalText = partial.content
+                let trimmed = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !trimmed.isEmpty && trimmed != "null" {
+                    streamingContent = finalText
+                }
             }
+            streamingContent = ""
             messages.append(CalendarMessage(role: .assistant, content: finalText))
         } catch {
+            streamingContent = ""
             messages.append(CalendarMessage(
                 role: .assistant,
                 content: "Sorry, something went wrong: \(error.localizedDescription)"
