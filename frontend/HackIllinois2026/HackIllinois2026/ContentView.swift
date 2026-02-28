@@ -6,18 +6,21 @@
 //
 
 import SwiftUI
+import FoundationModels
 
 struct ContentView: View {
     @State private var currentPrompt: String = ""
+    @State private var session = LanguageModelSession(model: .default, tools: [CalendarTool()])
     
     var body: some View {
         ScrollView {
             
         }
         .safeAreaBar(edge: .top) {
-            RoundedRectangle(cornerRadius: 40, style: .continuous)
+            TimelineCalendarView()
                 .foregroundStyle(.tertiary.opacity(0.5))
                 .frame(height: 240)
+                .clipShape(.rect(cornerRadius: 40))
                 .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 40))
         }
         .safeAreaBar(edge: .bottom) {
@@ -31,3 +34,6 @@ struct ContentView: View {
 #Preview {
     ContentView()
 }
+
+
+
