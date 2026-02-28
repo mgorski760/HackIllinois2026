@@ -1,16 +1,8 @@
-//
-//  CalendarInterfaceView.swift
-//  HackIllinois2026
-//
-//  Created by Om Chachad on 28/02/26.
-//
-
 import SwiftUI
 import FoundationModels
 
 struct CalendarInterfaceView: View {
 
-    // Injected from the parent — the parent owns the view model's lifetime.
     var viewModel: CalendarViewModel
 
     var body: some View {
@@ -21,8 +13,6 @@ struct CalendarInterfaceView: View {
             }
     }
 
-    // MARK: - Message List
-
     private var messageList: some View {
         ScrollViewReader { proxy in
             Group {
@@ -32,7 +22,6 @@ struct CalendarInterfaceView: View {
                             .font(.system(size: 100))
                             .foregroundStyle(.secondary)
                             .foregroundStyle(
-                                // A gradient of all colors but bolder and not rainbow.w
                                 LinearGradient(colors: [
                                     Color(.systemRed),
                                     Color(.systemOrange),
@@ -95,5 +84,4 @@ struct CalendarInterfaceView: View {
             }
         }
     }
-
 }

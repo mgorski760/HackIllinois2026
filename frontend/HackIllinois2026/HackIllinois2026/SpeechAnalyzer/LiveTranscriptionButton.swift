@@ -10,16 +10,6 @@ import SwiftUI
 import Speech
 import AVFoundation
 
-/// A self-contained button that streams live speech-to-text into `text`.
-///
-/// Usage:
-/// ```swift
-/// @State private var transcript = ""
-/// @State private var isRecording = false
-/// var body: some View {
-///     LiveTranscriptionButton(text: $transcript, isRecording: $isRecording)
-/// }
-/// ```
 public struct LiveTranscriptionButton: View {
 
     @Binding var text: String
