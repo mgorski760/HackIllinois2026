@@ -19,7 +19,7 @@ struct ContentView: View {
     
     var body: some View {
         NavigationStack {
-            CalendarToolView(viewModel: viewModel)
+            CalendarInterfaceView(viewModel: viewModel)
         }
         .safeAreaBar(edge: .top) {
             TimelineCalendarView()
