@@ -18,6 +18,8 @@ struct ContentView: View {
     @State private var isFileImporterPresented: Bool = false
     @State private var isShowingCamera: Bool = false
     
+    @State private var isTranscribing: Bool = false
+    
     var body: some View {
         NavigationStack {
             CalendarInterfaceView(viewModel: viewModel)
@@ -73,6 +75,24 @@ struct ContentView: View {
                             currentPrompt = ""
                         }
                     }
+                
+                LiveTranscriptionButton(text: $currentPrompt, isRecording: $isTranscribing)
+                
+                Button {
+                    Task {
+                        await viewModel.send(prompt: currentPrompt)
+                        currentPrompt = ""
+                    }
+                } label: {
+                    Label("Send", systemImage: "arrow.up")
+                        .labelStyle(.iconOnly)
+                        .bold()
+                        .foregroundStyle(.white)
+                        .padding()
+                }
+                .glassEffect(.regular.tint(.blue))
+                .buttonBorderShape(.circle)
+                .clipShape(.circle)
             }
             .padding()
         }

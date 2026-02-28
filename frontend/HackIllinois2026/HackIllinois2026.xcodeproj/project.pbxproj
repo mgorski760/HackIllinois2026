@@ -267,6 +267,7 @@
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Uses calendar to see and modify calendar events.";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "Lets this app modify and and work with your calendar events.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Uses the camera to capture images for the chat.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This is required to transcribe your voice.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
@@ -326,6 +327,7 @@
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Uses calendar to see and modify calendar events.";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "Lets this app modify and and work with your calendar events.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Uses the camera to capture images for the chat.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "This is required to transcribe your voice.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents[sdk=iphoneos*]" = YES;
