@@ -7,6 +7,8 @@
 
 import SwiftUI
 import FoundationModels
+import PDFKit
+import Vision
 
 @Observable
 final class CalendarViewModel {
@@ -21,7 +23,7 @@ final class CalendarViewModel {
 
     private var session = LanguageModelSession(
         tools: [CalendarTool()],
-        instructions: "You are a helpful calendar assistant. Help the user manage and query their calendar events."
+        instructions: "You are a helpful calendar assistant. Help the user manage and query their calendar events. Break down the user's requests into steps and call the appropriate tools to get the information needed to fulfill the request. Always use the provided tools for any calendar-related operations."
     )
 
     // MARK: - Prewarm
@@ -37,6 +39,78 @@ final class CalendarViewModel {
         guard !trimmed.isEmpty else { return }
 
         messages.append(CalendarMessage(role: .user, content: trimmed))
+        await respondToPrompt(trimmed)
+    }
+
+    func send(image: UIImage) async {
+        guard let cgImage = image.cgImage else { return }
+
+        let recognizedText: String
+        do {
+            recognizedText = try await recognizeText(in: cgImage)
+        } catch {
+            messages.append(CalendarMessage(
+                role: .assistant,
+                content: "Sorry, I couldn't read text from that image: \(error.localizedDescription)"
+            ))
+            return
+        }
+
+        guard !recognizedText.isEmpty else {
+            messages.append(CalendarMessage(
+                role: .assistant,
+                content: "I couldn't find any text in that image."
+            ))
+            return
+        }
+
+        let prompt = """
+        The following is text from an image I scanned, add all relevant dated events to my calendar and ignore the rest:
+        \(recognizedText)
+        """
+        messages.append(CalendarMessage(role: .user, content: prompt, attachment: .image(image)))
+        await respondToPrompt(prompt)
+    }
+
+    func send(pdfURL: URL) async {
+        guard let pdf = PDFDocument(url: pdfURL) else {
+            messages.append(CalendarMessage(
+                role: .assistant,
+                content: "Sorry, I couldn't open that PDF."
+            ))
+            return
+        }
+
+        let documentContent = NSMutableAttributedString()
+        for i in 0..<pdf.pageCount {
+            guard let page = pdf.page(at: i),
+                  let pageContent = page.attributedString else { continue }
+            documentContent.append(pageContent)
+        }
+
+        let text = documentContent.string.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else {
+            messages.append(CalendarMessage(
+                role: .assistant,
+                content: "The PDF appears to be empty or contains no readable text."
+            ))
+            return
+        }
+
+        let prompt = """
+        The following is text extracted from a PDF document. Add all relevant dated events to my calendar and ignore the rest:
+        \(text)
+        """
+        
+        messages.append(CalendarMessage(role: .user, content: prompt, attachment: .pdf(url: pdfURL, filename: pdfURL.lastPathComponent)))
+        await respondToPrompt(prompt)
+    }
+
+    // MARK: - Private Helpers
+
+    /// Shared helper: wraps a prompt with contextual date info, monitors the
+    /// session transcript for tool activity, sends the prompt, and handles errors.
+    private func respondToPrompt(_ userPrompt: String) async {
         agentActivity = []
         isRunning = true
 
@@ -46,7 +120,7 @@ final class CalendarViewModel {
         The current local date and time is \(formattedCurrentDate()).
         Use this information when interpreting relative dates like "today" or "tomorrow".
 
-        \(trimmed)
+        \(userPrompt)
         """
 
         let transcriptTask = Task { @MainActor [weak self] in
@@ -93,6 +167,19 @@ final class CalendarViewModel {
 
         agentActivity = []
         isRunning = false
+    }
+
+    /// Performs OCR on a CGImage using the Vision framework and returns the recognized text.
+    private func recognizeText(in cgImage: CGImage) async throws -> String {
+        let requestHandler = VNImageRequestHandler(cgImage: cgImage)
+        let request = VNRecognizeTextRequest()
+        try requestHandler.perform([request])
+
+        let observations = request.results ?? []
+        let recognizedStrings = observations.compactMap { observation in
+            observation.topCandidates(1).first?.string
+        }
+        return recognizedStrings.joined(separator: "\n")
     }
 
     // MARK: - Helpers

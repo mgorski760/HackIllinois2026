@@ -7,10 +7,15 @@
 
 import SwiftUI
 import FoundationModels
+import PhotosUI
 
 struct ContentView: View {
     @State private var viewModel = CalendarViewModel()
     @State private var currentPrompt: String = ""
+    
+    @State private var isShowingImagePicker: Bool = false
+    @State private var photosPickerItem: PhotosPickerItem?
+    @State private var isFileImporterPresented: Bool = false
     
     var body: some View {
         NavigationStack {
@@ -25,16 +30,74 @@ struct ContentView: View {
                 .padding()
         }
         .safeAreaBar(edge: .bottom) {
-            TextField("Ask whatever you'd like", text: $currentPrompt, axis: .vertical)
-                .disabled(viewModel.isRunning)
-                .textFieldStyle(.glass)
-                .padding()
-                .onSubmit {
-                    Task {
-                        await viewModel.send(prompt: currentPrompt)
-                        currentPrompt = ""
+            HStack {
+                Menu {
+                    Button("Photo Library", systemImage: "photo.on.rectangle") {
+                        isShowingImagePicker = true
+                    }
+                    .task(id: photosPickerItem) {
+                        if let photosPickerItem {             // Process the selected photo
+                            Task {
+                                if let data = try? await photosPickerItem.loadTransferable(type: Data.self), let image = UIImage(data: data) {
+                                    await viewModel.send(image: image)
+                                } else {
+                                    print("Failed to load photo data.")
+                                }
+                            }
+                        }
+                    }
+                    
+                    Button("Camera", systemImage: "camera") {
+                        // Handle camera action
+                    }
+                    
+                    Button("Upload from files", systemImage: "folder") {
+                        isFileImporterPresented = true
+                    }
+                } label: {
+                    Label("Attach File", systemImage: "plus")
+                        .labelStyle(.iconOnly)
+                        .padding()
+                }
+                .glassEffect(.regular.tint(Color(uiColor: .tertiaryLabel).opacity(0.5)))
+                .buttonBorderShape(.circle)
+                .clipShape(.circle)
+                
+                TextField("Ask whatever you'd like", text: $currentPrompt, axis: .vertical)
+                    .disabled(viewModel.isRunning)
+                    .textFieldStyle(.glass)
+                    .onSubmit {
+                        Task {
+                            await viewModel.send(prompt: currentPrompt)
+                            currentPrompt = ""
+                        }
+                    }
+            }
+            .padding()
+        }
+        .photosPicker(isPresented: $isShowingImagePicker, selection: $photosPickerItem, matching: .images)
+        .fileImporter(isPresented: $isFileImporterPresented, allowedContentTypes: [.image, .pdf]) { result in
+            switch result {
+            case .success(let url):
+                Task {
+                    guard url.startAccessingSecurityScopedResource() else {
+                        print("Couldn't access the file.")
+                        return
+                    }
+                    
+                    if let data = try? Data(contentsOf: url) {
+                        if url.pathExtension.lowercased() == "pdf" {
+                            await viewModel.send(pdfURL: url)
+                        } else if let image = UIImage(data: data) {
+                            await viewModel.send(image: image)
+                        }
+                    } else {
+                        print("Failed to load file data.")
                     }
                 }
+            case .failure(let error):
+                print("File import failed with error: \(error.localizedDescription)")
+            }
         }
     }
 }

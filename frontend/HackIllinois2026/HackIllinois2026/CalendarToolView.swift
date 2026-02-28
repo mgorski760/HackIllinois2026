@@ -14,9 +14,21 @@ struct CalendarMessage: Identifiable {
     let id = UUID()
     let role: Role
     let content: String
+    let attachment: Attachment?
 
     enum Role {
         case user, assistant
+    }
+
+    enum Attachment {
+        case image(UIImage)
+        case pdf(url: URL, filename: String)
+    }
+
+    init(role: Role, content: String, attachment: Attachment? = nil) {
+        self.role = role
+        self.content = content
+        self.attachment = attachment
     }
 }
 
@@ -85,7 +97,7 @@ struct CalendarToolView: View {
                         .padding(.vertical, 16)
                     }
                     .contentMargins(.top, 300, for: .scrollContent)
-                    .contentMargins(.bottom, 40, for: .scrollContent)
+                    .contentMargins(.bottom, 70, for: .scrollContent)
                 }
             }
             .onChange(of: viewModel.messages.count) { _, _ in
@@ -155,15 +167,50 @@ struct MessageBubble: View {
         HStack {
             if isUser { Spacer(minLength: 48) }
 
-            Text(formattedContent)
-                .font(.system(size: 15))
-                .foregroundStyle(isUser ? .white : .primary)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .glassEffect(.regular.tint(isUser ? Color(.systemBlue) : Color(.secondarySystemGroupedBackground)), in: .rect(cornerRadius: 18, style: .continuous))
+            Group {
+                if let attachment = message.attachment {
+                    attachmentView(attachment)
+                } else {
+                    Text(formattedContent)
+                        .font(.system(size: 15))
+                        .foregroundStyle(isUser ? .white : .primary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 10)
+                        .glassEffect(.regular.tint(isUser ? Color(.systemBlue) : Color(.secondarySystemGroupedBackground)), in: .rect(cornerRadius: 18, style: .continuous))
+                }
+            }
+
             if !isUser { Spacer(minLength: 48) }
         }
         .padding(.vertical, 2)
+    }
+
+    @ViewBuilder
+    private func attachmentView(_ attachment: CalendarMessage.Attachment) -> some View {
+        switch attachment {
+        case .image(let image):
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(maxWidth: 200, maxHeight: 260)
+                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+                .glassEffect(.regular.tint(Color(.systemBlue).opacity(0.3)), in: .rect(cornerRadius: 18, style: .continuous))
+
+        case .pdf(_, let filename):
+            HStack(spacing: 10) {
+                Image(systemName: "doc.fill")
+                    .font(.system(size: 28))
+                    .foregroundStyle(.white)
+                Text(filename)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .glassEffect(.regular.tint(Color(.systemBlue)), in: .rect(cornerRadius: 18, style: .continuous))
+        }
     }
 }
 
