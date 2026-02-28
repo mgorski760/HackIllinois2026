@@ -24,6 +24,11 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             CalendarInterfaceView(viewModel: viewModel)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .background {
+                    LinearGradient(colors: [Color.clear, Color(uiColor: .blue).opacity(0.1)], startPoint: .top, endPoint: .bottom)
+                        .ignoresSafeArea()
+                }
         }
         .safeAreaBar(edge: .bottom) { toolbar }
         .calendarWidget(isExpanded: $isCalendarExpanded, animation: expandAnimation)
@@ -51,15 +56,17 @@ struct ContentView: View {
 
     private var attachMenu: some View {
         Menu {
-            Button("Photo Library", systemImage: "photo.on.rectangle") { isShowingImagePicker = true }
             Button("Camera",        systemImage: "camera")              { isShowingCamera = true }
+            Button("Photo Library", systemImage: "photo.on.rectangle") { isShowingImagePicker = true }
             Button("Files",         systemImage: "folder")              { isFileImporterPresented = true }
         } label: {
             Label("Attach", systemImage: "plus").labelStyle(.iconOnly).padding()
         }
-        .glassEffect(.regular.tint(Color(uiColor: .tertiaryLabel).opacity(0.5)))
+        .glassEffect(.regular)
         .buttonBorderShape(.circle)
+        .padding(2)
         .clipShape(.circle)
+        .padding(-2)
         .task(id: photosPickerItem) {
             guard let item = photosPickerItem,
                   let data = try? await item.loadTransferable(type: Data.self),
