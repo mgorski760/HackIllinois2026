@@ -9,12 +9,13 @@ import SwiftUI
 import FoundationModels
 
 struct ContentView: View {
+    @State private var viewModel = CalendarViewModel()
     @State private var currentPrompt: String = ""
-    @State private var session = LanguageModelSession(model: .default, tools: [CalendarTool()])
+    //@Sta/*te private var session = LanguageModelSession(model: .default, tools: [CalendarTool()])*/
     
     var body: some View {
-        ScrollView {
-            
+        NavigationStack {
+            CalendarToolView(viewModel: viewModel)
         }
         .safeAreaBar(edge: .top) {
             TimelineCalendarView()
@@ -22,12 +23,20 @@ struct ContentView: View {
                 .frame(height: 240)
                 .clipShape(.rect(cornerRadius: 40))
                 .glassEffect(.regular.interactive(), in: .rect(cornerRadius: 40))
+                .padding()
         }
         .safeAreaBar(edge: .bottom) {
             TextField("Ask whatever you'd like", text: $currentPrompt, axis: .vertical)
+                .disabled(viewModel.isRunning)
                 .textFieldStyle(.glass)
+                .padding()
+                .onSubmit {
+                    Task {
+                        await viewModel.send(prompt: currentPrompt)
+                        currentPrompt = ""
+                    }
+                }
         }
-        .padding()
     }
 }
 
