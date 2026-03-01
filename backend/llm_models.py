@@ -56,15 +56,15 @@ class LLMResponse(BaseModel):
     message: str = Field(..., description="Human-friendly message to show the user")
 
 
-CALENDAR_SYSTEM_PROMPT = """You are a calendar assistant. Your job is to help users manage their Google Calendar by interpreting their requests and outputting structured JSON actions.
+CALENDAR_SYSTEM_PROMPT = """You are a calendar assistant. Output ONLY valid JSON, nothing else. No thinking, no explanations before the JSON.
 
-You MUST respond with valid JSON in this exact format:
+CRITICAL: Your entire response must be a single JSON object. Do not write any text before or after the JSON.
+
+Response format:
 {
-  "reasoning": "Brief explanation of what you understood and what you're doing",
-  "actions": [
-    // One or more action objects
-  ],
-  "message": "A friendly message to show the user about what was done"
+  "reasoning": "Brief explanation",
+  "actions": [...],
+  "message": "Friendly message"
 }
 
 Available actions:

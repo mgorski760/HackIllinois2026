@@ -34,6 +34,7 @@ class AgentRequest(BaseModel):
     """Request to the calendar agent."""
     prompt: str
     timezone: str | None = None
+    current_datetime: str | None = None  # ISO format: "2026-02-28T14:30:00"
 
 
 class ActionResult(BaseModel):
@@ -71,8 +72,16 @@ def handle_google_error(e: HttpError) -> str:
     else:
         return f"Google Calendar error: {e.reason}"
 
-def resolve_user_datetime(request_timezone: str | None) -> tuple[datetime, str]:
-    """Return the user's current datetime and the resolved timezone label."""
+def resolve_user_datetime(
+    request_timezone: str | None,
+    request_datetime: str | None = None
+) -> tuple[datetime, str]:
+    """Return the user's current datetime and the resolved timezone label.
+    
+    Args:
+        request_timezone: User's timezone (e.g., "America/Chicago")
+        request_datetime: User's current datetime in ISO format (e.g., "2026-02-28T14:30:00")
+    """
     tzinfo = timezone.utc
     tz_label = "UTC"
 
@@ -82,6 +91,18 @@ def resolve_user_datetime(request_timezone: str | None) -> tuple[datetime, str]:
             tz_label = request_timezone
         except Exception:
             tzinfo = timezone.utc
+    
+    # If frontend provides current_datetime, parse and use it
+    if request_datetime:
+        try:
+            # Try parsing with timezone info
+            user_dt = datetime.fromisoformat(request_datetime)
+            # If no timezone, attach the resolved timezone
+            if user_dt.tzinfo is None:
+                user_dt = user_dt.replace(tzinfo=tzinfo)
+            return user_dt, tz_label
+        except Exception:
+            pass  # Fall through to server time
     
     return datetime.now(tzinfo), tz_label
 
@@ -104,7 +125,10 @@ async def chat_with_agent(
     - "Cancel my 2pm meeting today"
     """
     access_token = google_user.access_token
-    user_datetime, resolved_timezone = resolve_user_datetime(request.timezone)
+    user_datetime, resolved_timezone = resolve_user_datetime(
+        request.timezone,
+        request.current_datetime
+    )
 
     # First, fetch existing events to give LLM context for updates/deletes
     service = get_calendar_service(access_token)

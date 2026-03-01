@@ -44,7 +44,7 @@ async def call_vllm(
     user_email: Optional[str] = None,
     user_datetime: Optional[datetime] = None,
     user_timezone: Optional[str] = None,
-    max_tokens: int = 2048,
+    max_tokens: int = 4096,  # Increased for thinking models
 ) -> str:
     """
     Call the vLLM server and get a completion.
@@ -95,7 +95,6 @@ async def call_vllm(
                 ],
                 "max_tokens": max_tokens,
                 "temperature": 0.1,  # Low temperature for more deterministic JSON output
-                "response_format": {"type": "json_object"},  # Force JSON output
             }
         )
         response.raise_for_status()
@@ -130,13 +129,28 @@ def parse_llm_response(response_text: str) -> LLMResponse:
     
     text = text.strip()
     
+    # Try direct parse first
     try:
         data = json.loads(text)
         return LLMResponse(**data)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to parse LLM response as JSON: {e}\nResponse: {response_text}")
-    except Exception as e:
-        raise ValueError(f"Failed to validate LLM response: {e}\nResponse: {response_text}")
+    except json.JSONDecodeError:
+        pass  # Try extraction below
+    
+    # For thinking models: extract JSON object from anywhere in the response
+    start_idx = text.find('{')
+    end_idx = text.rfind('}')
+    
+    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+        json_text = text[start_idx:end_idx + 1]
+        try:
+            data = json.loads(json_text)
+            return LLMResponse(**data)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Failed to parse LLM response as JSON: {e}\nResponse: {response_text[:500]}")
+        except Exception as e:
+            raise ValueError(f"Failed to validate LLM response: {e}\nResponse: {response_text[:500]}")
+    
+    raise ValueError(f"No JSON found in LLM response\nResponse: {response_text[:500]}")
 
 
 async def get_calendar_actions(

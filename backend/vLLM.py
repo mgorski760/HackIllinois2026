@@ -14,8 +14,9 @@ vllm_image = (
     .env({"HF_XET_HIGH_PERFORMANCE": "1"})  # faster model transfers
 )
 
-MODEL_NAME = "Qwen/Qwen3-4B-Thinking-2507-FP8"
-MODEL_REVISION = "953532f942706930ec4bb870569932ef63038fdf"
+# Using non-thinking model for structured JSON output
+MODEL_NAME = "Qwen/Qwen3-8B"
+MODEL_REVISION = "main"
 
 hf_cache_vol = modal.Volume.from_name("huggingface-cache", create_if_missing=True)
 
