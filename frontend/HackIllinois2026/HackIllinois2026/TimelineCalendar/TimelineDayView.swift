@@ -5,12 +5,14 @@ import SwiftUI
 struct TimelineDayView: View {
     let date: Date
     let hourHeight: CGFloat
-    @EnvironmentObject var manager: EventKitManager
+    @EnvironmentObject var manager: GoogleCalendarManager
+    
+    @State private var events: [CalendarEvent] = []
+    @State private var isLoading = false
 
     private let timeColWidth: CGFloat = 50
     private let hours = Array(0..<24)
 
-    private var events: [CalendarEvent] { manager.fetchEvents(for: date) }
     private var allDayEvents: [CalendarEvent] { events.filter(\.isAllDay) }
     private var timedEvents:  [CalendarEvent] { events.filter { !$0.isAllDay } }
 
@@ -43,9 +45,37 @@ struct TimelineDayView: View {
                         Color(uiColor: .systemBackground)
                             .ignoresSafeArea()
                     )
+                    .overlay {
+                        if isLoading {
+                            ProgressView()
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .background(Color(uiColor: .systemBackground).opacity(0.5))
+                        }
+                    }
                 }
-                .onAppear { scrollToNow(proxy: proxy) }
-                .onChange(of: date) { _, _ in scrollToNow(proxy: proxy) }
+                .onAppear {
+                    scrollToNow(proxy: proxy)
+                    loadEvents()
+                }
+                .onChange(of: date) { _, _ in
+                    scrollToNow(proxy: proxy)
+                    loadEvents()
+                }
+                .onChange(of: manager.lastRefreshDate) { _, _ in
+                    // Refresh events when triggered by AI actions
+                    loadEvents()
+                }
+            }
+        }
+    }
+    
+    private func loadEvents() {
+        isLoading = true
+        Task {
+            let fetchedEvents = await manager.fetchEvents(for: date)
+            await MainActor.run {
+                events = fetchedEvents
+                isLoading = false
             }
         }
     }

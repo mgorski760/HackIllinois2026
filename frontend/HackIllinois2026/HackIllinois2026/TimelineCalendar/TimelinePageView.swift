@@ -4,7 +4,7 @@ import SwiftUI
 
 struct TimelinePageView: View {
     @Binding var selectedDate: Date
-    @EnvironmentObject var manager: EventKitManager
+    @EnvironmentObject var manager: GoogleCalendarManager
 
     // We keep a separate anchor so we can silently shift it without jarring the UI.
     @State private var anchor: Date = Date()
@@ -30,6 +30,7 @@ struct TimelinePageView: View {
                 TimelineDayView(date: dateForIndex(index), hourHeight: hourHeight)
                     .environmentObject(manager)
                     .tag(index)
+                    .id("\(dateForIndex(index))-\(manager.lastRefreshDate.timeIntervalSince1970)")
                     .simultaneousGesture(
                         MagnificationGesture()
                             .onChanged { scale in

@@ -1,20 +1,24 @@
 import SwiftUI
-import EventKit
+
 // MARK: - Timeline Calendar View (main entry point)
 
-/// Drop-in SwiftUI calendar timeline. Add NSCalendarsUsageDescription to Info.plist.
+/// Drop-in SwiftUI calendar timeline using Google Calendar API
 public struct TimelineCalendarView: View {
-    @StateObject private var manager = EventKitManager()
+    @StateObject private var manager: GoogleCalendarManager
     @State private var selectedDate  = Date()
 
     /// Optional binding that the parent can drive to expand/collapse the calendar into full-screen.
     /// When `nil` the expand button is hidden (backward-compatible).
     var isExpanded: Binding<Bool>?
 
-    public init() { self.isExpanded = nil }
+    init(manager: GoogleCalendarManager) {
+        _manager = StateObject(wrappedValue: manager)
+        self.isExpanded = nil
+    }
 
     /// Designated init used by ContentView to wire up the full-screen expansion.
-    init(isExpanded: Binding<Bool>) {
+    init(manager: GoogleCalendarManager, isExpanded: Binding<Bool>) {
+        _manager = StateObject(wrappedValue: manager)
         self.isExpanded = isExpanded
     }
 
@@ -24,10 +28,8 @@ public struct TimelineCalendarView: View {
                 if manager.isAuthorized {
                     TimelinePageView(selectedDate: $selectedDate)
                         .environmentObject(manager)
-                } else if manager.authorizationStatus == .denied || manager.authorizationStatus == .restricted {
-                    PermissionDeniedView()
                 } else {
-                    PermissionRequestView { Task { await manager.requestAccess() } }
+                    PermissionDeniedView()
                 }
             }
             .navigationTitle(headerTitle)
@@ -54,9 +56,6 @@ public struct TimelineCalendarView: View {
                 }
             }
         }
-        .task {
-            if !manager.isAuthorized { await manager.requestAccess() }
-        }
     }
 
     private var headerTitle: String {
@@ -68,5 +67,6 @@ public struct TimelineCalendarView: View {
 // MARK: - Preview
 
 #Preview {
-    TimelineCalendarView()
+    // Preview requires proper initialization with dependencies
+    Text("Preview requires GoogleCalendarManager setup")
 }

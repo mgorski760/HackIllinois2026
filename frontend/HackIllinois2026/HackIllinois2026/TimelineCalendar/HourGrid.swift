@@ -21,7 +21,6 @@ struct HourGrid: View {
                                 .foregroundStyle(.secondary)
                                 .frame(width: timeColWidth, alignment: .trailing)
                                 .padding(.trailing, 8)
-                                .offset(y: -7)
                         }
                     }
                     // Separator line

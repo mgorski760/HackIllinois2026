@@ -36,10 +36,7 @@ struct EventBlock: View {
         let g = geometry
         let e = slot.event
         let isShort = g.h < 34
-
-        Button {
-            showingDetails = true
-        } label: {
+        
             ZStack(alignment: .topLeading) {
                 // Background fill
                 RoundedRectangle(cornerRadius: 5, style: .continuous)
@@ -75,22 +72,10 @@ struct EventBlock: View {
                 .padding(.leading, 6)
                 .padding(.vertical, 3)
                 .padding(.trailing, 4)
-            }
-            .frame(width: g.w, height: g.h)
-            .scaleEffect(pressed ? 0.97 : 1.0)
-            .animation(.spring(response: 0.2), value: pressed)
         }
+        .frame(width: g.w, height: g.h)
         .buttonStyle(.plain)
         .offset(x: g.x, y: g.y)
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 0)
-                .onChanged { _ in pressed = true }
-                .onEnded   { _ in pressed = false }
-        )
-//        .popover(isPresented: $showingDetails) {
-//            EventDetailSheet(event: slot.event)
-//                .presentationCompactAdaptation(.popover)
-//        }
     }
 
     private func timeLabel(_ e: CalendarEvent) -> String {
