@@ -1,0 +1,295 @@
+================================================================================
+                         CALENDAR AGENT API REFERENCE
+================================================================================
+
+BASE URL: https://your-railway-url.up.railway.app
+         (or http://localhost:8002 for local testing)
+
+================================================================================
+                              AUTHENTICATION
+================================================================================
+
+All /agent/* endpoints require a Google OAuth access token.
+
+Header:
+  Authorization: Bearer <google_access_token>
+
+The access token must have these Google Calendar scopes:
+  - https://www.googleapis.com/auth/calendar
+  - https://www.googleapis.com/auth/calendar.events
+
+--------------------------------------------------------------------------------
+iOS GOOGLE SIGN-IN SETUP
+--------------------------------------------------------------------------------
+
+1. Add Google Sign-In SDK via Swift Package Manager:
+   https://github.com/google/GoogleSignIn-iOS
+
+2. Configure in Google Cloud Console:
+   - Create OAuth 2.0 Client ID (iOS type)
+   - Add your bundle ID
+   - Download GoogleService-Info.plist
+
+3. Request calendar scope during sign-in:
+
+   Swift Example:
+   ```swift
+   import GoogleSignIn
+
+   let additionalScopes = ["https://www.googleapis.com/auth/calendar"]
+   
+   GIDSignIn.sharedInstance.signIn(
+       withPresenting: viewController,
+       hint: nil,
+       additionalScopes: additionalScopes
+   ) { result, error in
+       guard let user = result?.user else { return }
+       
+       // Get the access token
+       let accessToken = user.accessToken.tokenString
+       
+       // Use this token for API calls
+       makeAgentRequest(accessToken: accessToken)
+   }
+   ```
+
+4. Refresh token when expired:
+   ```swift
+   user.refreshTokensIfNeeded { user, error in
+       let freshToken = user?.accessToken.tokenString
+   }
+   ```
+
+================================================================================
+                              API ENDPOINTS
+================================================================================
+
+--------------------------------------------------------------------------------
+POST /agent/chat
+--------------------------------------------------------------------------------
+Send a natural language request to the calendar agent.
+
+REQUEST:
+  Headers:
+    Authorization: Bearer <google_access_token>
+    Content-Type: application/json
+
+  Body:
+  {
+    "prompt": "Schedule a meeting tomorrow at 3pm for 1 hour",
+    "timezone": "America/Chicago",           // Optional, IANA timezone
+    "current_datetime": "2025-02-28T14:30:00" // Optional, ISO format
+  }
+
+  Fields:
+    - prompt (required): Natural language instruction
+    - timezone (optional): User's timezone (e.g., "America/Chicago", "America/New_York")
+    - current_datetime (optional): User's current local time in ISO format
+      If not provided, server uses its own time (may be incorrect)
+
+RESPONSE (200 OK):
+  {
+    "message": "I scheduled a 1-hour meeting for tomorrow at 3pm.",
+    "reasoning": "The user wants a meeting tomorrow...",
+    "results": [
+      {
+        "action": "create",
+        "success": true,
+        "data": {
+          "id": "abc123xyz",
+          "summary": "Meeting",
+          "start": {
+            "dateTime": "2025-03-01T15:00:00-06:00",
+            "timeZone": "America/Chicago"
+          },
+          "end": {
+            "dateTime": "2025-03-01T16:00:00-06:00",
+            "timeZone": "America/Chicago"
+          },
+          "description": null,
+          "location": null,
+          "htmlLink": "https://calendar.google.com/...",
+          "status": "confirmed"
+        },
+        "error": null,
+        "can_undo": true
+      }
+    ]
+  }
+
+ERROR RESPONSES:
+  401 Unauthorized - Invalid or expired access token
+  422 Unprocessable Entity - Could not understand the request
+  502 Bad Gateway - Error communicating with AI
+
+--------------------------------------------------------------------------------
+POST /agent/undo
+--------------------------------------------------------------------------------
+Undo the last calendar action (create, update, or delete).
+
+REQUEST:
+  Headers:
+    Authorization: Bearer <google_access_token>
+
+  Body: (none)
+
+RESPONSE (200 OK):
+  {
+    "success": true,
+    "message": "Successfully undid: create event",
+    "undone_action": "create",
+    "data": { ... }
+  }
+
+--------------------------------------------------------------------------------
+GET /agent/history
+--------------------------------------------------------------------------------
+Get the action history for the current user (for debugging).
+
+REQUEST:
+  Headers:
+    Authorization: Bearer <google_access_token>
+
+RESPONSE (200 OK):
+  {
+    "actions": [
+      {
+        "id": "uuid-here",
+        "timestamp": "2025-02-28T14:30:00Z",
+        "action_type": "create",
+        "event_id": "abc123"
+      }
+    ]
+  }
+
+================================================================================
+                           EXAMPLE PROMPTS
+================================================================================
+
+Creating Events:
+  - "Schedule a meeting tomorrow at 3pm for 1 hour"
+  - "Create a dentist appointment on March 15th at 2pm"
+  - "Add a weekly standup every Monday at 9am"
+
+Updating Events:
+  - "Move my dentist appointment to Friday"
+  - "Change my 3pm meeting to 4pm"
+  - "Rename 'Team Sync' to 'Sprint Planning'"
+
+Deleting Events:
+  - "Cancel my 2pm meeting today"
+  - "Delete the dentist appointment"
+  - "Remove all meetings on Friday"
+
+Querying Events:
+  - "What's on my calendar tomorrow?"
+  - "Show me next week's schedule"
+  - "When is my next meeting?"
+
+================================================================================
+                         iOS SWIFT EXAMPLE
+================================================================================
+
+```swift
+import Foundation
+
+struct AgentRequest: Codable {
+    let prompt: String
+    let timezone: String?
+    let current_datetime: String?
+}
+
+struct AgentResponse: Codable {
+    let message: String
+    let reasoning: String?
+    let results: [ActionResult]
+}
+
+struct ActionResult: Codable {
+    let action: String
+    let success: Bool
+    let data: AnyCodable?
+    let error: String?
+    let can_undo: Bool
+}
+
+class CalendarAgentService {
+    let baseURL = "https://your-railway-url.up.railway.app"
+    
+    func chat(
+        prompt: String,
+        accessToken: String,
+        timezone: String = "America/Chicago"
+    ) async throws -> AgentResponse {
+        let url = URL(string: "\(baseURL)/agent/chat")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        
+        // Get current datetime from device
+        let formatter = ISO8601DateFormatter()
+        let currentDatetime = formatter.string(from: Date())
+        
+        let body = AgentRequest(
+            prompt: prompt,
+            timezone: timezone,
+            current_datetime: currentDatetime
+        )
+        request.httpBody = try JSONEncoder().encode(body)
+        
+        let (data, response) = try await URLSession.shared.data(for: request)
+        
+        guard let httpResponse = response as? HTTPURLResponse,
+              httpResponse.statusCode == 200 else {
+            throw APIError.requestFailed
+        }
+        
+        return try JSONDecoder().decode(AgentResponse.self, from: data)
+    }
+    
+    func undo(accessToken: String) async throws -> UndoResponse {
+        let url = URL(string: "\(baseURL)/agent/undo")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        
+        let (data, _) = try await URLSession.shared.data(for: request)
+        return try JSONDecoder().decode(UndoResponse.self, from: data)
+    }
+}
+
+// Usage:
+let service = CalendarAgentService()
+let response = try await service.chat(
+    prompt: "Schedule a meeting tomorrow at 3pm",
+    accessToken: googleUser.accessToken.tokenString
+)
+print(response.message)
+```
+
+================================================================================
+                              NOTES
+================================================================================
+
+1. ACCESS TOKEN LIFETIME
+   Google access tokens expire after ~1 hour. 
+   Use GIDSignIn.sharedInstance.currentUser?.refreshTokensIfNeeded() to refresh.
+
+2. TIMEZONE
+   Always send the user's timezone for accurate date calculations.
+   Use TimeZone.current.identifier in iOS.
+
+3. CURRENT_DATETIME
+   Send the device's current datetime so the AI knows "today" and "tomorrow" correctly.
+   Format: ISO 8601 (e.g., "2025-02-28T14:30:00" or "2025-02-28T14:30:00-06:00")
+
+4. UNDO
+   Only the last action can be undone. Multiple undos are not supported.
+   Only create/update/delete actions can be undone (not list/get queries).
+
+5. ERROR HANDLING
+   Check results[].success for each action. 
+   If false, results[].error contains the error message.
+
+================================================================================

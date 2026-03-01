@@ -1,7 +1,7 @@
 import os
 import json
 import httpx
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from dotenv import load_dotenv
 
@@ -18,9 +18,9 @@ MODEL_NAME = os.getenv("VLLM_MODEL_NAME", "Qwen/Qwen3-Coder-Next")
 def format_events_context(events: list[dict]) -> str:
     """Format a list of events into a string for the LLM context."""
     if not events:
-        return "No upcoming events found."
+        return "User's calendar: No events found in the next 60 days."
     
-    lines = ["Existing calendar events (use these event_id values for update/delete):"]
+    lines = [f"User's calendar ({len(events)} events - use these to answer questions about their schedule):"]
     for event in events:
         event_id = event.get("id", "unknown")
         summary = event.get("summary", "No title")
@@ -29,8 +29,8 @@ def format_events_context(events: list[dict]) -> str:
         end = event.get("end", {})
         end_time = end.get("dateTime", end.get("date", "unknown"))
         
-        lines.append(f"  - event_id: \"{event_id}\"")
-        lines.append(f"    summary: \"{summary}\"")
+        lines.append(f"  - \"{summary}\"")
+        lines.append(f"    event_id: \"{event_id}\"")
         lines.append(f"    start: {start_time}")
         lines.append(f"    end: {end_time}")
     
@@ -44,7 +44,8 @@ async def call_vllm(
     user_email: Optional[str] = None,
     user_datetime: Optional[datetime] = None,
     user_timezone: Optional[str] = None,
-    max_tokens: int = 2048,
+    chat_context: Optional[str] = None,
+    max_tokens: int = 4096,  # Increased for thinking models
 ) -> str:
     """
     Call the vLLM server and get a completion.
@@ -57,15 +58,39 @@ async def call_vllm(
     Returns:
         The generated text response
     """
-    current_time = datetime.now(timezone.utc).isoformat()
-    
     # Build context with events if provided
-    context_parts = [f"Current datetime: {current_time}"]
+    context_parts = []
 
-    if user_timezone:
-        context_parts.append(f"User timezone: {user_timezone}")
-    if user_datetime:
-        context_parts.append(f"User local datetime: {user_datetime.isoformat()}")
+    # Prioritize user's local datetime over server UTC time - make it very prominent
+    # Also pre-compute tomorrow to avoid LLM date calculation errors
+    if user_datetime and user_timezone:
+        date_str = user_datetime.strftime('%A, %B %d, %Y')
+        time_str = user_datetime.strftime('%I:%M %p')
+        iso_date = user_datetime.strftime('%Y-%m-%d')
+        
+        # Pre-compute tomorrow (handles month/year boundaries correctly)
+        tomorrow = user_datetime + timedelta(days=1)
+        tomorrow_str = tomorrow.strftime('%A, %B %d, %Y')
+        tomorrow_iso = tomorrow.strftime('%Y-%m-%d')
+        
+        context_parts.append(f">>> TODAY IS: {date_str} ({iso_date}) <<<")
+        context_parts.append(f">>> TOMORROW IS: {tomorrow_str} ({tomorrow_iso}) <<<")
+        context_parts.append(f"Current date and time: {date_str} at {time_str} ({user_timezone})")
+    elif user_datetime:
+        date_str = user_datetime.strftime('%A, %B %d, %Y')
+        time_str = user_datetime.strftime('%I:%M %p')
+        iso_date = user_datetime.strftime('%Y-%m-%d')
+        
+        tomorrow = user_datetime + timedelta(days=1)
+        tomorrow_str = tomorrow.strftime('%A, %B %d, %Y')
+        tomorrow_iso = tomorrow.strftime('%Y-%m-%d')
+        
+        context_parts.append(f">>> TODAY IS: {date_str} ({iso_date}) <<<")
+        context_parts.append(f">>> TOMORROW IS: {tomorrow_str} ({tomorrow_iso}) <<<")
+        context_parts.append(f"Current date and time: {date_str} at {time_str}")
+    else:
+        current_time = datetime.now(timezone.utc).isoformat()
+        context_parts.append(f"Current datetime (UTC): {current_time}")
 
     if user_email and user_datetime:
         try:
@@ -78,6 +103,9 @@ async def call_vllm(
     
     if events_context:
         context_parts.append(format_events_context(events_context))
+    
+    if chat_context:
+        context_parts.append(chat_context)
     
     context_parts.append(f"User request: {prompt}")
     context_parts.append("Respond with valid JSON only:")
@@ -95,7 +123,6 @@ async def call_vllm(
                 ],
                 "max_tokens": max_tokens,
                 "temperature": 0.1,  # Low temperature for more deterministic JSON output
-                "response_format": {"type": "json_object"},  # Force JSON output
             }
         )
         response.raise_for_status()
@@ -130,13 +157,28 @@ def parse_llm_response(response_text: str) -> LLMResponse:
     
     text = text.strip()
     
+    # Try direct parse first
     try:
         data = json.loads(text)
         return LLMResponse(**data)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"Failed to parse LLM response as JSON: {e}\nResponse: {response_text}")
-    except Exception as e:
-        raise ValueError(f"Failed to validate LLM response: {e}\nResponse: {response_text}")
+    except json.JSONDecodeError:
+        pass  # Try extraction below
+    
+    # For thinking models: extract JSON object from anywhere in the response
+    start_idx = text.find('{')
+    end_idx = text.rfind('}')
+    
+    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+        json_text = text[start_idx:end_idx + 1]
+        try:
+            data = json.loads(json_text)
+            return LLMResponse(**data)
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Failed to parse LLM response as JSON: {e}\nResponse: {response_text[:500]}")
+        except Exception as e:
+            raise ValueError(f"Failed to validate LLM response: {e}\nResponse: {response_text[:500]}")
+    
+    raise ValueError(f"No JSON found in LLM response\nResponse: {response_text[:500]}")
 
 
 async def get_calendar_actions(
@@ -146,6 +188,7 @@ async def get_calendar_actions(
     user_email: Optional[str] = None,
     user_datetime: Optional[datetime] = None,
     user_timezone: Optional[str] = None,
+    chat_context: Optional[str] = None,
 ) -> LLMResponse:
     """
     Get calendar actions from the LLM based on user prompt.
@@ -163,5 +206,6 @@ async def get_calendar_actions(
         user_email=user_email,
         user_datetime=user_datetime,
         user_timezone=user_timezone,
+        chat_context=chat_context,
     )
     return parse_llm_response(response_text)

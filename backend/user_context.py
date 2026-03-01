@@ -11,14 +11,22 @@ import os
 
 from datetime import datetime
 from typing import Optional
+from dotenv import load_dotenv
 
-from supermemory import Supermemory
+load_dotenv()
 
-client = Supermemory(
-        api_key=os.getenv("SUPERMEMORY_API_KEY"),  # Default, can be omitted
-)
+# Check if Supermemory is enabled
+SUPERMEMORY_ENABLED = os.getenv("SUPERMEMORY_ENABLED", "false").lower() == "true"
 
-client = Supermemory()
+# Lazy client initialization
+_client = None
+
+def _get_client():
+    global _client
+    if _client is None and SUPERMEMORY_ENABLED:
+        from supermemory import Supermemory
+        _client = Supermemory(api_key=os.getenv("SUPERMEMORY_API_KEY"))
+    return _client
 
 
 def build_user_context(user_email: str, user_datetime: datetime) -> Optional[str]:
@@ -39,17 +47,25 @@ def build_user_context(user_email: str, user_datetime: datetime) -> Optional[str
         - The current stub simply exposes the two values for validation.
     """
 
-    # TODO: Replace this placeholder with your internal integration.
-    # Keep the return shape as a string so it can be appended directly
-    # to the prompt context sent to Modal's LLM.
+    # Return None if Supermemory is disabled
+    if not SUPERMEMORY_ENABLED:
+        return None
+    
+    client = _get_client()
+    if client is None:
+        return None
+
     current_month = user_datetime.strftime("%B")
     
-    profile = client.profile(container_tag=f'{user_email}_{current_month}')
-    
-    if profile is None:
-        client.add()
-    return (
-        "User profile context:\n"
-        f"  email: {user_email}\n"
-        f"  current_month: {current_month}"
-    )
+    try:
+        profile = client.profile(container_tag=f'{user_email}_{current_month}')
+        
+        if profile is None:
+            client.add()
+        return (
+            "User profile context:\n"
+            f"  email: {user_email}\n"
+            f"  current_month: {current_month}"
+        )
+    except Exception:
+        return None

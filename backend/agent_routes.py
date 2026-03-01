@@ -1,4 +1,5 @@
 import uuid
+import asyncio
 from datetime import datetime, timezone, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -30,10 +31,31 @@ from action_history import action_history, ActionRecord
 router = APIRouter(prefix="/agent", tags=["agent"])
 
 
+class ChatMessageInput(BaseModel):
+    """A single message in the chat history."""
+    role: str  # "user" or "assistant"
+    content: str
+
+
 class AgentRequest(BaseModel):
     """Request to the calendar agent."""
     prompt: str
     timezone: str | None = None
+    current_datetime: str | None = None  # ISO format: "2026-02-28T14:30:00"
+    chat_history: list[ChatMessageInput] | None = None  # Previous conversation messages
+
+
+def format_chat_history(messages: list[ChatMessageInput] | None) -> str:
+    """Format chat history array into context string for LLM."""
+    if not messages:
+        return ""
+    
+    lines = ["Previous conversation:"]
+    for msg in messages:
+        role_label = "User" if msg.role == "user" else "Assistant"
+        lines.append(f"{role_label}: {msg.content}")
+    
+    return "\n".join(lines)
 
 
 class ActionResult(BaseModel):
@@ -71,8 +93,16 @@ def handle_google_error(e: HttpError) -> str:
     else:
         return f"Google Calendar error: {e.reason}"
 
-def resolve_user_datetime(request_timezone: str | None) -> tuple[datetime, str]:
-    """Return the user's current datetime and the resolved timezone label."""
+def resolve_user_datetime(
+    request_timezone: str | None,
+    request_datetime: str | None = None
+) -> tuple[datetime, str]:
+    """Return the user's current datetime and the resolved timezone label.
+    
+    Args:
+        request_timezone: User's timezone (e.g., "America/Chicago")
+        request_datetime: User's current datetime in ISO format (e.g., "2026-02-28T14:30:00")
+    """
     tzinfo = timezone.utc
     tz_label = "UTC"
 
@@ -82,6 +112,18 @@ def resolve_user_datetime(request_timezone: str | None) -> tuple[datetime, str]:
             tz_label = request_timezone
         except Exception:
             tzinfo = timezone.utc
+    
+    # If frontend provides current_datetime, parse and use it
+    if request_datetime:
+        try:
+            # Try parsing with timezone info
+            user_dt = datetime.fromisoformat(request_datetime)
+            # If no timezone, attach the resolved timezone
+            if user_dt.tzinfo is None:
+                user_dt = user_dt.replace(tzinfo=tzinfo)
+            return user_dt, tz_label
+        except Exception:
+            pass  # Fall through to server time
     
     return datetime.now(tzinfo), tz_label
 
@@ -104,7 +146,10 @@ async def chat_with_agent(
     - "Cancel my 2pm meeting today"
     """
     access_token = google_user.access_token
-    user_datetime, resolved_timezone = resolve_user_datetime(request.timezone)
+    user_datetime, resolved_timezone = resolve_user_datetime(
+        request.timezone,
+        request.current_datetime
+    )
 
     # First, fetch existing events to give LLM context for updates/deletes
     service = get_calendar_service(access_token)
@@ -120,6 +165,9 @@ async def chat_with_agent(
     except Exception:
         existing_events = []  # Continue without context if fetch fails
     
+    # Format chat history from request
+    chat_context = format_chat_history(request.chat_history)
+    
     try:
         # Get actions from LLM with event context and user metadata
         llm_response = await get_calendar_actions(
@@ -128,6 +176,7 @@ async def chat_with_agent(
             user_email=google_user.email,
             user_datetime=user_datetime,
             user_timezone=resolved_timezone,
+            chat_context=chat_context,
         )
     except ValueError as e:
         raise HTTPException(
@@ -202,21 +251,73 @@ async def chat_with_agent(
                 
             elif isinstance(action, DeleteEventAction):
                 # Get event data BEFORE deleting for rollback
-                event_to_delete = get_event(service, action.event_id)
+                try:
+                    event_to_delete = get_event(service, action.event_id)
+                    event_summary = event_to_delete.get("summary", "Unknown event")
+                except HttpError as e:
+                    if e.resp.status == 404:
+                        result.error = f"Event not found (ID: {action.event_id}). It may have already been deleted."
+                        results.append(result)
+                        continue
+                    raise
                 
-                delete_event(service, action.event_id)
-                result.success = True
-                result.can_undo = True
-                result.data = {"deleted": action.event_id}
+                # Attempt delete with verification and retry
+                delete_verified = False
+                max_attempts = 2
                 
-                # Store full event data for rollback (re-create)
-                action_history.add(access_token, ActionRecord(
-                    id=str(uuid.uuid4()),
-                    timestamp=datetime.now(timezone.utc).isoformat(),
-                    action_type="delete",
-                    event_id=action.event_id,
-                    rollback_data={"deleted_event": event_to_delete}
-                ))
+                for attempt in range(max_attempts):
+                    try:
+                        delete_event(service, action.event_id)
+                        
+                        # Wait briefly then verify deletion
+                        await asyncio.sleep(0.5)
+                        
+                        # Try to fetch the event - should fail with 404 if deleted
+                        try:
+                            get_event(service, action.event_id)
+                            # If we get here, event still exists
+                            if attempt < max_attempts - 1:
+                                await asyncio.sleep(1)  # Wait before retry
+                                continue
+                        except HttpError as verify_error:
+                            if verify_error.resp.status == 404:
+                                # Event is confirmed deleted
+                                delete_verified = True
+                                break
+                            # Other error during verification - assume deleted
+                            delete_verified = True
+                            break
+                    except HttpError as delete_error:
+                        if delete_error.resp.status == 404:
+                            # Already deleted
+                            delete_verified = True
+                            break
+                        if attempt < max_attempts - 1:
+                            await asyncio.sleep(1)
+                            continue
+                        raise
+                
+                if delete_verified:
+                    result.success = True
+                    result.can_undo = True
+                    result.data = {"deleted": action.event_id, "summary": event_summary, "verified": True}
+                    
+                    # Store full event data for rollback (re-create)
+                    action_history.add(access_token, ActionRecord(
+                        id=str(uuid.uuid4()),
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                        action_type="delete",
+                        event_id=action.event_id,
+                        rollback_data={"deleted_event": event_to_delete}
+                    ))
+                else:
+                    # Delete failed after retries - request LLM to try again with correct ID
+                    result.error = f"Failed to delete '{event_summary}'. The event may have been modified. Please try again."
+                    result.data = {
+                        "failed_event_id": action.event_id,
+                        "event_summary": event_summary,
+                        "retry_needed": True
+                    }
                 
             elif isinstance(action, ListEventsAction):
                 events_result = list_events(
@@ -245,6 +346,86 @@ async def chat_with_agent(
             result.error = str(e)
         
         results.append(result)
+    
+    # Check for failed delete actions that need re-prompting
+    failed_deletes = [r for r in results if r.data and isinstance(r.data, dict) and r.data.get("retry_needed")]
+    
+    if failed_deletes and len(failed_deletes) > 0:
+        # Re-fetch current events to get updated state
+        try:
+            now = datetime.now(timezone.utc)
+            time_min = (now - timedelta(days=7)).isoformat()
+            time_max = (now + timedelta(days=60)).isoformat()
+            events_result = list_events(service, time_min=time_min, time_max=time_max, max_results=100)
+            existing_events = events_result.get("items", [])
+        except Exception:
+            existing_events = []
+        
+        # Build retry prompt with context about failed deletion
+        failed_summaries = [r.data.get("event_summary", "unknown") for r in failed_deletes]
+        retry_prompt = f"SYSTEM: The previous delete attempt failed for: {', '.join(failed_summaries)}. " \
+                       f"Please verify the correct event ID from the updated calendar events list and retry the deletion. " \
+                       f"Original user request: {request.prompt}"
+        
+        try:
+            # Re-prompt LLM with updated context
+            retry_response = await get_calendar_actions(
+                retry_prompt,
+                events_context=existing_events,
+                user_email=google_user.email,
+                user_datetime=user_datetime,
+                user_timezone=resolved_timezone,
+                chat_context=chat_context,
+            )
+            
+            # Execute retry actions (only deletes)
+            for action in retry_response.actions:
+                if isinstance(action, DeleteEventAction):
+                    retry_result = ActionResult(action=action.action, success=False, can_undo=False)
+                    try:
+                        event_to_delete = get_event(service, action.event_id)
+                        event_summary = event_to_delete.get("summary", "Unknown event")
+                        
+                        delete_event(service, action.event_id)
+                        await asyncio.sleep(0.5)
+                        
+                        # Verify
+                        try:
+                            get_event(service, action.event_id)
+                            retry_result.error = f"Retry failed: Event '{event_summary}' still exists."
+                        except HttpError as verify_error:
+                            if verify_error.resp.status == 404:
+                                retry_result.success = True
+                                retry_result.can_undo = True
+                                retry_result.data = {"deleted": action.event_id, "summary": event_summary, "verified": True, "was_retry": True}
+                                action_history.add(access_token, ActionRecord(
+                                    id=str(uuid.uuid4()),
+                                    timestamp=datetime.now(timezone.utc).isoformat(),
+                                    action_type="delete",
+                                    event_id=action.event_id,
+                                    rollback_data={"deleted_event": event_to_delete}
+                                ))
+                    except HttpError as e:
+                        if e.resp.status == 404:
+                            retry_result.success = True
+                            retry_result.data = {"deleted": action.event_id, "already_deleted": True}
+                        else:
+                            retry_result.error = handle_google_error(e)
+                    except Exception as e:
+                        retry_result.error = str(e)
+                    
+                    results.append(retry_result)
+            
+            # Update message if retry was successful
+            successful_retries = [r for r in results if r.data and isinstance(r.data, dict) and r.data.get("was_retry") and r.success]
+            if successful_retries:
+                return AgentResponse(
+                    message=retry_response.message,
+                    reasoning=f"Retry successful. {retry_response.reasoning}",
+                    results=results
+                )
+        except Exception:
+            pass  # If retry fails, return original results
     
     return AgentResponse(
         message=llm_response.message,
