@@ -30,11 +30,31 @@ from action_history import action_history, ActionRecord
 router = APIRouter(prefix="/agent", tags=["agent"])
 
 
+class ChatMessageInput(BaseModel):
+    """A single message in the chat history."""
+    role: str  # "user" or "assistant"
+    content: str
+
+
 class AgentRequest(BaseModel):
     """Request to the calendar agent."""
     prompt: str
     timezone: str | None = None
     current_datetime: str | None = None  # ISO format: "2026-02-28T14:30:00"
+    chat_history: list[ChatMessageInput] | None = None  # Previous conversation messages
+
+
+def format_chat_history(messages: list[ChatMessageInput] | None) -> str:
+    """Format chat history array into context string for LLM."""
+    if not messages:
+        return ""
+    
+    lines = ["Previous conversation:"]
+    for msg in messages:
+        role_label = "User" if msg.role == "user" else "Assistant"
+        lines.append(f"{role_label}: {msg.content}")
+    
+    return "\n".join(lines)
 
 
 class ActionResult(BaseModel):
@@ -144,6 +164,9 @@ async def chat_with_agent(
     except Exception:
         existing_events = []  # Continue without context if fetch fails
     
+    # Format chat history from request
+    chat_context = format_chat_history(request.chat_history)
+    
     try:
         # Get actions from LLM with event context and user metadata
         llm_response = await get_calendar_actions(
@@ -152,6 +175,7 @@ async def chat_with_agent(
             user_email=google_user.email,
             user_datetime=user_datetime,
             user_timezone=resolved_timezone,
+            chat_context=chat_context,
         )
     except ValueError as e:
         raise HTTPException(

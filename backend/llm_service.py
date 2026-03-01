@@ -44,6 +44,7 @@ async def call_vllm(
     user_email: Optional[str] = None,
     user_datetime: Optional[datetime] = None,
     user_timezone: Optional[str] = None,
+    chat_context: Optional[str] = None,
     max_tokens: int = 4096,  # Increased for thinking models
 ) -> str:
     """
@@ -78,6 +79,9 @@ async def call_vllm(
     
     if events_context:
         context_parts.append(format_events_context(events_context))
+    
+    if chat_context:
+        context_parts.append(chat_context)
     
     context_parts.append(f"User request: {prompt}")
     context_parts.append("Respond with valid JSON only:")
@@ -160,6 +164,7 @@ async def get_calendar_actions(
     user_email: Optional[str] = None,
     user_datetime: Optional[datetime] = None,
     user_timezone: Optional[str] = None,
+    chat_context: Optional[str] = None,
 ) -> LLMResponse:
     """
     Get calendar actions from the LLM based on user prompt.
@@ -177,5 +182,6 @@ async def get_calendar_actions(
         user_email=user_email,
         user_datetime=user_datetime,
         user_timezone=user_timezone,
+        chat_context=chat_context,
     )
     return parse_llm_response(response_text)
