@@ -1,7 +1,7 @@
 import os
 import json
 import httpx
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Optional
 from dotenv import load_dotenv
 
@@ -62,15 +62,31 @@ async def call_vllm(
     context_parts = []
 
     # Prioritize user's local datetime over server UTC time - make it very prominent
+    # Also pre-compute tomorrow to avoid LLM date calculation errors
     if user_datetime and user_timezone:
         date_str = user_datetime.strftime('%A, %B %d, %Y')
         time_str = user_datetime.strftime('%I:%M %p')
-        context_parts.append(f">>> TODAY IS: {date_str} <<<")
+        iso_date = user_datetime.strftime('%Y-%m-%d')
+        
+        # Pre-compute tomorrow (handles month/year boundaries correctly)
+        tomorrow = user_datetime + timedelta(days=1)
+        tomorrow_str = tomorrow.strftime('%A, %B %d, %Y')
+        tomorrow_iso = tomorrow.strftime('%Y-%m-%d')
+        
+        context_parts.append(f">>> TODAY IS: {date_str} ({iso_date}) <<<")
+        context_parts.append(f">>> TOMORROW IS: {tomorrow_str} ({tomorrow_iso}) <<<")
         context_parts.append(f"Current date and time: {date_str} at {time_str} ({user_timezone})")
     elif user_datetime:
         date_str = user_datetime.strftime('%A, %B %d, %Y')
         time_str = user_datetime.strftime('%I:%M %p')
-        context_parts.append(f">>> TODAY IS: {date_str} <<<")
+        iso_date = user_datetime.strftime('%Y-%m-%d')
+        
+        tomorrow = user_datetime + timedelta(days=1)
+        tomorrow_str = tomorrow.strftime('%A, %B %d, %Y')
+        tomorrow_iso = tomorrow.strftime('%Y-%m-%d')
+        
+        context_parts.append(f">>> TODAY IS: {date_str} ({iso_date}) <<<")
+        context_parts.append(f">>> TOMORROW IS: {tomorrow_str} ({tomorrow_iso}) <<<")
         context_parts.append(f"Current date and time: {date_str} at {time_str}")
     else:
         current_time = datetime.now(timezone.utc).isoformat()

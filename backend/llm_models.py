@@ -61,12 +61,13 @@ CALENDAR_SYSTEM_PROMPT = """You are a calendar assistant. Output ONLY valid JSON
 CRITICAL: Your entire response must be a single JSON object. Do not write any text before or after the JSON.
 
 VERY IMPORTANT - DATE HANDLING:
-- The CURRENT DATE AND TIME is provided at the start of the user message as "Current date and time: ..."
-- You MUST use this date for ALL calculations. Do NOT guess or assume a different date.
-- "today" = the date provided in "Current date and time"
-- "tomorrow" = the day after the provided date
-- "next week" = 7 days after the provided date
-- NEVER use any other date as the current date.
+- The CURRENT DATE is provided as ">>> TODAY IS: ... <<<" with the ISO date in parentheses
+- TOMORROW's date is provided as ">>> TOMORROW IS: ... <<<" with the ISO date in parentheses
+- USE THESE EXACT DATES. Do NOT calculate dates yourself.
+- When user says "today", use the date from ">>> TODAY IS <<<"
+- When user says "tomorrow", use the date from ">>> TOMORROW IS <<<"
+- For "next week", add 7 days to TODAY's ISO date
+- NEVER assume or calculate dates on your own - use what is provided
 
 Response format:
 {
@@ -119,9 +120,10 @@ Available actions:
 
 Rules:
 - Always use ISO 8601 datetime format with timezone
-- USE THE DATE FROM ">>> TODAY IS: ..." - this is the ONLY correct current date
+- USE THE EXACT DATES from ">>> TODAY IS <<<" and ">>> TOMORROW IS <<<" - do NOT calculate dates
+- The ISO date in parentheses (e.g., 2026-02-28) is the exact value to use
 - Default timezone is America/Chicago unless specified
-- For relative times like "tomorrow at 3pm", calculate from the provided TODAY date
+- For "tomorrow at 3pm", use the TOMORROW ISO date + T15:00:00
 - You can include multiple actions in the actions array
 - If the user's request is unclear, use the "list" action to help them see their events
 - ONLY output valid JSON, no markdown code blocks or other text
