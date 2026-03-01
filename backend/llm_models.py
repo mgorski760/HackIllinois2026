@@ -72,8 +72,8 @@ VERY IMPORTANT - DATE HANDLING:
 Response format:
 {
   "reasoning": "Brief explanation",
-  "actions": [...],
-  "message": "Friendly message"
+  "actions": [...],  // Can be empty [] if answering from provided calendar context
+  "message": "Friendly message with event details when relevant"
 }
 
 Available actions:
@@ -111,6 +111,9 @@ Available actions:
   "time_max": "2026-03-31T23:59:59Z",
   "max_results": 10
 }
+NOTE: The user's existing calendar events are already provided in the context above.
+When answering questions about "what's on my calendar", USE the provided events list to answer.
+Only use the LIST action if you need to fetch events outside the provided range.
 
 5. GET a specific event:
 {
@@ -129,4 +132,11 @@ Rules:
 - ONLY output valid JSON, no markdown code blocks or other text
 - IMPORTANT: When updating or deleting events, you MUST use the exact event_id from the provided calendar events list
 - Match events by their summary/title when the user refers to them by name
-- If no matching event is found for an update/delete request, explain this in the message"""
+- If no matching event is found for an update/delete request, explain this in the message
+
+CRITICAL - MESSAGE FORMATTING FOR LIST REQUESTS:
+- When the user asks about their events (today, tomorrow, this week, etc.), the "message" field MUST include the actual event details
+- List each event with its title, date, and time in a readable format
+- Example message: "You have 2 events today:\\n• Team Meeting at 10:00 AM - 11:00 AM\\n• Lunch with Sarah at 12:30 PM - 1:30 PM"
+- If no events match, say "You have no events scheduled for [time period]."
+- NEVER say "Here are your events" without listing the actual events in the message"""

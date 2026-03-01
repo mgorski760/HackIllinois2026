@@ -18,9 +18,9 @@ MODEL_NAME = os.getenv("VLLM_MODEL_NAME", "Qwen/Qwen3-Coder-Next")
 def format_events_context(events: list[dict]) -> str:
     """Format a list of events into a string for the LLM context."""
     if not events:
-        return "No upcoming events found."
+        return "User's calendar: No events found in the next 60 days."
     
-    lines = ["Existing calendar events (use these event_id values for update/delete):"]
+    lines = [f"User's calendar ({len(events)} events - use these to answer questions about their schedule):"]
     for event in events:
         event_id = event.get("id", "unknown")
         summary = event.get("summary", "No title")
@@ -29,8 +29,8 @@ def format_events_context(events: list[dict]) -> str:
         end = event.get("end", {})
         end_time = end.get("dateTime", end.get("date", "unknown"))
         
-        lines.append(f"  - event_id: \"{event_id}\"")
-        lines.append(f"    summary: \"{summary}\"")
+        lines.append(f"  - \"{summary}\"")
+        lines.append(f"    event_id: \"{event_id}\"")
         lines.append(f"    start: {start_time}")
         lines.append(f"    end: {end_time}")
     
