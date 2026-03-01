@@ -103,9 +103,10 @@ user/email-aware context into the LLM prompt.
 
 Key Details:
   - Accepts Google OAuth email + user-local datetime (based on request timezone)
-  - Default implementation simply echoes those values for debugging
-  - Replace the placeholder with calls to your key-value store or
-    proprietary systems (e.g., `TODO.add(email, current_date)`)
+  - Exposes helpers to `store_user_preferences()` and `get_user_preferences()`
+    backed by the Supermemory client
+  - `build_user_context()` automatically pulls stored preference strings and
+    injects them into the LLM prompt when available
 
 --------------------------------------------------------------------------------
 agent_routes.py - AI Agent Endpoints
@@ -265,6 +266,23 @@ GET /agent/history
         }
       ]
     }
+
+POST /agent/preferences
+  Description: Persist user-specific scheduling preferences that will be added
+               to the LLM context during future /agent/chat calls
+  Request Body:
+    {
+      "preference": "Avoid meetings before 9am and skip Fridays",
+      "timezone": "America/Chicago"   // optional, defaults to UTC
+    }
+  Response:
+    {
+      "status": "saved",
+      "timezone": "America/Chicago"
+    }
+  Notes:
+    - Requires the same Bearer token; email is inferred via GoogleUser
+    - Preferences are stored in Supermemory and keyed by email + month
 
 --------------------------------------------------------------------------------
 LEGACY ENDPOINTS

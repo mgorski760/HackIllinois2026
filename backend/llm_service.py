@@ -12,7 +12,7 @@ load_dotenv()
 
 # Modal vLLM endpoint URL - set this in .env file
 VLLM_URL = os.getenv("VLLM_URL", "http://localhost:8000")
-MODEL_NAME = os.getenv("VLLM_MODEL_NAME", "Qwen/Qwen3-Coder-Next")
+MODEL_NAME = os.getenv("VLLM_MODEL_NAME", "Qwen/Qwen3-4B-Thinking-2507-FP8")
 
 
 def format_events_context(events: list[dict]) -> str:
@@ -57,15 +57,16 @@ async def call_vllm(
     Returns:
         The generated text response
     """
-    current_time = datetime.now(timezone.utc).isoformat()
-    
     # Build context with events if provided
-    context_parts = [f"Current datetime: {current_time}"]
+    context_parts = []
 
-    if user_timezone:
-        context_parts.append(f"User timezone: {user_timezone}")
-    if user_datetime:
-        context_parts.append(f"User local datetime: {user_datetime.isoformat()}")
+    # Emphasize the user's local time for date calculations
+    if user_datetime and user_timezone:
+        context_parts.append(f"IMPORTANT - User's current local date/time: {user_datetime.strftime('%A, %B %d, %Y at %I:%M %p')} ({user_timezone})")
+        context_parts.append(f"Use this as the reference for 'today', 'tomorrow', etc.")
+    else:
+        current_time = datetime.now(timezone.utc)
+        context_parts.append(f"Current datetime (UTC): {current_time.strftime('%A, %B %d, %Y at %I:%M %p')}")
 
     if user_email and user_datetime:
         try:

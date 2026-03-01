@@ -25,6 +25,7 @@ from llm_models import (
     GetEventAction,
 )
 from action_history import action_history, ActionRecord
+from user_context import store_user_preferences
 
 
 router = APIRouter(prefix="/agent", tags=["agent"])
@@ -33,6 +34,12 @@ router = APIRouter(prefix="/agent", tags=["agent"])
 class AgentRequest(BaseModel):
     """Request to the calendar agent."""
     prompt: str
+    timezone: str | None = None
+
+
+class PreferenceRequest(BaseModel):
+    """Request body for storing scheduling preferences."""
+    preference: str
     timezone: str | None = None
 
 
@@ -71,15 +78,35 @@ def handle_google_error(e: HttpError) -> str:
     else:
         return f"Google Calendar error: {e.reason}"
 
+
+# Common timezone abbreviations → IANA names
+TIMEZONE_ALIASES = {
+    "CST": "America/Chicago",
+    "CDT": "America/Chicago",
+    "EST": "America/New_York",
+    "EDT": "America/New_York",
+    "PST": "America/Los_Angeles",
+    "PDT": "America/Los_Angeles",
+    "MST": "America/Denver",
+    "MDT": "America/Denver",
+    "CT": "America/Chicago",
+    "ET": "America/New_York",
+    "PT": "America/Los_Angeles",
+    "MT": "America/Denver",
+}
+
+
 def resolve_user_datetime(request_timezone: str | None) -> tuple[datetime, str]:
     """Return the user's current datetime and the resolved timezone label."""
     tzinfo = timezone.utc
     tz_label = "UTC"
 
     if request_timezone:
+        # Map common abbreviations to IANA names
+        tz_name = TIMEZONE_ALIASES.get(request_timezone.upper(), request_timezone)
         try:
-            tzinfo = ZoneInfo(request_timezone)
-            tz_label = request_timezone
+            tzinfo = ZoneInfo(tz_name)
+            tz_label = tz_name
         except Exception:
             tzinfo = timezone.utc
     
@@ -342,4 +369,32 @@ async def get_action_history(
             }
             for h in history
         ]
+    }
+
+
+@router.post("/preferences", status_code=status.HTTP_201_CREATED)
+async def save_user_preferences(
+    request: PreferenceRequest,
+    google_user: GoogleUser = Depends(get_google_user),
+):
+    """Persist the caller's scheduling preferences for future LLM context."""
+
+    user_datetime, resolved_timezone = resolve_user_datetime(request.timezone)
+
+    try:
+        store_user_preferences(google_user.email, request.preference, user_datetime)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc)
+        ) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to store user preferences"
+        ) from exc
+
+    return {
+        "status": "saved",
+        "timezone": resolved_timezone,
     }
