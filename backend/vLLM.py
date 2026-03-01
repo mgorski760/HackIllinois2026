@@ -15,7 +15,7 @@ vllm_image = (
 )
 
 # Using non-thinking model for structured JSON output
-MODEL_NAME = "Qwen/Qwen3-8B"
+MODEL_NAME = "openai/gpt-oss-20b"
 MODEL_REVISION = "main"
 
 hf_cache_vol = modal.Volume.from_name("huggingface-cache", create_if_missing=True)
