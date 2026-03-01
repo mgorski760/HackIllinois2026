@@ -6,7 +6,6 @@
 //
 
 import SwiftUI
-import FoundationModels
 import PDFKit
 import Vision
 
@@ -22,21 +21,25 @@ final class CalendarViewModel {
 
     // MARK: - Private
 
-    private var session = LanguageModelSession(
-        tools: [CalendarTool()],
-        instructions: """
-        You are a helpful calendar assistant. Help the user manage and query their calendar events. \
-        Break down the user's requests into steps and call the appropriate tools to get the information needed to fulfill the request. \
-        Always use the provided tools for any calendar-related operations. \
-        IMPORTANT: When the user asks you to create multiple events, you MUST make a separate 'create' tool call for EACH individual event. \
-        Do NOT try to combine multiple events into a single tool call. Call the tool once per event, one after another.
-        """
-    )
+    private let apiService: APIService
+    private let authManager: AuthManager
+    private let calendarManager: GoogleCalendarManager
+    
+    // Chat history for the API
+    private var chatHistory: [ChatMessageInput] = []
+
+    // MARK: - Initialization
+    
+    init(apiService: APIService, authManager: AuthManager, calendarManager: GoogleCalendarManager) {
+        self.apiService = apiService
+        self.authManager = authManager
+        self.calendarManager = calendarManager
+    }
 
     // MARK: - Prewarm
 
     func prewarm() {
-        session.prewarm()
+        // No prewarming needed for API-based agent
     }
 
     // MARK: - Send
@@ -72,11 +75,6 @@ final class CalendarViewModel {
         }
 
         let prompt = """
-        The user's current time zone is \(TimeZone.current.identifier).
-        The user's current locale identifier is \(Locale.current.identifier).
-        The current local date and time is \(formattedCurrentDate()).
-        Use this information when interpreting relative dates like "today" or "tomorrow".
-        
         The following is text from an image I scanned, add all relevant dated events to my calendar and ignore the rest:
         \(recognizedText)
         """
@@ -110,11 +108,6 @@ final class CalendarViewModel {
         }
 
         let prompt = """
-        The user's current time zone is \(TimeZone.current.identifier).
-        The user's current locale identifier is \(Locale.current.identifier).
-        The current local date and time is \(formattedCurrentDate()).
-        Use this information when interpreting relative dates like "today" or "tomorrow".
-        
         The following is text extracted from a PDF document. Add all relevant dated events to my calendar and ignore the rest:
         \(text)
         """
@@ -125,77 +118,70 @@ final class CalendarViewModel {
 
     // MARK: - Private Helpers
 
-    /// Shared helper: wraps a prompt with contextual date info, monitors the
-    /// session transcript for tool activity, sends the prompt, and handles errors.
-    /// Uses the streaming API to support multiple sequential tool calls.
+    /// Sends prompt to the Modal API agent and processes the response
     private func respondToPrompt(_ userPrompt: String) async {
         agentActivity = []
         isRunning = true
+        streamingContent = ""
 
-        let contextualPrompt = """
-        The user's current time zone is \(TimeZone.current.identifier).
-        The user's current locale identifier is \(Locale.current.identifier).
-        The current local date and time is \(formattedCurrentDate()).
-        Use this information when interpreting relative dates like "today" or "tomorrow".
-
-        \(userPrompt)
-        """
-
-        let initialTranscriptCount = session.transcript.count
-
-        // Monitor the transcript for tool-call activity in the background.
-        let transcriptTask = Task { @MainActor [weak self] in
-            guard let self else { return }
-            var seenCount = initialTranscriptCount
-            while !Task.isCancelled {
-                let entries = session.transcript
-                if entries.count > seenCount {
-                    for entry in entries[seenCount..<entries.count] {
-                        switch entry {
-                        case .toolCalls(let calls):
-                            for call in calls {
-                                agentActivity.append(AgentActivityEvent(
-                                    icon: "hammer.fill",
-                                    label: "Calling \(call.toolName)…"
-                                ))
-                            }
-                        case .toolOutput:
-                            agentActivity.append(AgentActivityEvent(
-                                icon: "checkmark.circle.fill",
-                                label: "Tool returned results"
-                            ))
-                        default:
-                            break
-                        }
-                    }
-                    seenCount = entries.count
-                }
-                try await Task.sleep(for: .milliseconds(200))
-            }
-        }
+        // Add user message to chat history
+        chatHistory.append(ChatMessageInput(role: "user", content: userPrompt))
 
         do {
-            var finalText = ""
-            streamingContent = ""
-            let stream = session.streamResponse(to: contextualPrompt)
-            for try await partial in stream {
-                finalText = partial.content
-                let trimmed = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
-                if !trimmed.isEmpty && trimmed != "null" {
-                    streamingContent = finalText
-                }
+            // Refresh token if needed
+            try await authManager.refreshTokenIfNeeded()
+            
+            // Show activity indicator
+            agentActivity.append(AgentActivityEvent(
+                icon: "sparkles",
+                label: "Thinking..."
+            ))
+
+            // Create agent request
+            let request = AgentRequest(
+                prompt: userPrompt,
+                timezone: TimeZone.current.identifier,
+                current_datetime: formattedCurrentDate(),
+                chat_history: chatHistory.count > 10 ? Array(chatHistory.suffix(10)) : chatHistory
+            )
+
+            // Call the agent
+            let response = try await apiService.chat(request: request)
+            
+            // Process results and show activity
+            for result in response.results {
+                let icon = result.success ? "checkmark.circle.fill" : "xmark.circle.fill"
+                let actionName = result.action.capitalized
+                agentActivity.append(AgentActivityEvent(
+                    icon: icon,
+                    label: "\(actionName) \(result.success ? "completed" : "failed")"
+                ))
+                
+                // Brief delay to show each activity
+                try? await Task.sleep(for: .milliseconds(200))
             }
-            streamingContent = ""
-            messages.append(CalendarMessage(role: .assistant, content: finalText))
+
+            // Add assistant response to messages and chat history
+            let assistantMessage = response.message
+            messages.append(CalendarMessage(role: .assistant, content: assistantMessage))
+            chatHistory.append(ChatMessageInput(role: "assistant", content: assistantMessage))
+            
+            // Trigger calendar refresh after AI actions with a small delay to ensure backend sync
+            try? await Task.sleep(for: .milliseconds(300))
+            calendarManager.triggerRefresh()
+
+        } catch APIError.unauthorized {
+            messages.append(CalendarMessage(
+                role: .assistant,
+                content: "Your session has expired. Please sign in again."
+            ))
         } catch {
-            streamingContent = ""
             messages.append(CalendarMessage(
                 role: .assistant,
                 content: "Sorry, something went wrong: \(error.localizedDescription)"
             ))
         }
 
-        transcriptTask.cancel()
         agentActivity = []
         isRunning = false
     }
@@ -216,10 +202,8 @@ final class CalendarViewModel {
     // MARK: - Helpers
 
     private func formattedCurrentDate() -> String {
-        let formatter = Date.ISO8601FormatStyle(
-            includingFractionalSeconds: false,
-            timeZone: TimeZone.current
-        )
-        return Date.now.formatted(formatter)
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = TimeZone.current
+        return formatter.string(from: Date())
     }
 }

@@ -33,14 +33,14 @@ struct AllDaySingleStrip: View {
     let event: CalendarEvent
 
     var body: some View {
-        Button { showingDetails = true } label: {
+//        Button { showingDetails = true } label: {
             Text(event.title)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 4)
                 .background(event.color, in: RoundedRectangle(cornerRadius: 5, style: .continuous))
-        }
+//        }
         .buttonStyle(.plain)
 //        .popover(isPresented: $showingDetails) {
 //            EventDetailSheet(event: event)

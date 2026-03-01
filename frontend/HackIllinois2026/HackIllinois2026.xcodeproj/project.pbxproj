@@ -6,13 +6,31 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		C2D631892F53E27F0077F610 /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = C2D631882F53E27F0077F610 /* GoogleSignIn */; };
+		C2D6318B2F53E27F0077F610 /* GoogleSignInSwift in Frameworks */ = {isa = PBXBuildFile; productRef = C2D6318A2F53E27F0077F610 /* GoogleSignInSwift */; };
+/* End PBXBuildFile section */
+
 /* Begin PBXFileReference section */
 		C270CB482F52A1FA0054A8AB /* HackIllinois2026.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HackIllinois2026.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		C265DA4E2F53FC1C00F07FAB /* Exceptions for "HackIllinois2026" folder in "HackIllinois2026" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = C270CB472F52A1FA0054A8AB /* HackIllinois2026 */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		C270CB4A2F52A1FA0054A8AB /* HackIllinois2026 */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				C265DA4E2F53FC1C00F07FAB /* Exceptions for "HackIllinois2026" folder in "HackIllinois2026" target */,
+			);
 			path = HackIllinois2026;
 			sourceTree = "<group>";
 		};
@@ -23,6 +41,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				C2D631892F53E27F0077F610 /* GoogleSignIn in Frameworks */,
+				C2D6318B2F53E27F0077F610 /* GoogleSignInSwift in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -65,6 +85,8 @@
 			);
 			name = HackIllinois2026;
 			packageProductDependencies = (
+				C2D631882F53E27F0077F610 /* GoogleSignIn */,
+				C2D6318A2F53E27F0077F610 /* GoogleSignInSwift */,
 			);
 			productName = HackIllinois2026;
 			productReference = C270CB482F52A1FA0054A8AB /* HackIllinois2026.app */;
@@ -94,6 +116,9 @@
 			);
 			mainGroup = C270CB3F2F52A1FA0054A8AB;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				C2D631872F53E27F0077F610 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = C270CB492F52A1FA0054A8AB /* Products */;
 			projectDirPath = "";
@@ -264,6 +289,7 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = HackIllinois2026/Info.plist;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Uses calendar to see and modify calendar events.";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "Lets this app modify and and work with your calendar events.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Uses the camera to capture images for the chat.";
@@ -325,6 +351,7 @@
 				ENABLE_RESOURCE_ACCESS_USB = NO;
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = HackIllinois2026/Info.plist;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Uses calendar to see and modify calendar events.";
 				INFOPLIST_KEY_NSCalendarsUsageDescription = "Lets this app modify and and work with your calendar events.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "Uses the camera to capture images for the chat.";
@@ -385,6 +412,30 @@
 			defaultConfigurationName = Release;
 		};
 /* End XCConfigurationList section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		C2D631872F53E27F0077F610 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.1.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		C2D631882F53E27F0077F610 /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C2D631872F53E27F0077F610 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
+		};
+		C2D6318A2F53E27F0077F610 /* GoogleSignInSwift */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C2D631872F53E27F0077F610 /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignInSwift;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = C270CB402F52A1FA0054A8AB /* Project object */;
 }
