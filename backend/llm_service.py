@@ -58,15 +58,23 @@ async def call_vllm(
     Returns:
         The generated text response
     """
-    current_time = datetime.now(timezone.utc).isoformat()
-    
     # Build context with events if provided
-    context_parts = [f"Current datetime: {current_time}"]
+    context_parts = []
 
-    if user_timezone:
-        context_parts.append(f"User timezone: {user_timezone}")
-    if user_datetime:
-        context_parts.append(f"User local datetime: {user_datetime.isoformat()}")
+    # Prioritize user's local datetime over server UTC time - make it very prominent
+    if user_datetime and user_timezone:
+        date_str = user_datetime.strftime('%A, %B %d, %Y')
+        time_str = user_datetime.strftime('%I:%M %p')
+        context_parts.append(f">>> TODAY IS: {date_str} <<<")
+        context_parts.append(f"Current date and time: {date_str} at {time_str} ({user_timezone})")
+    elif user_datetime:
+        date_str = user_datetime.strftime('%A, %B %d, %Y')
+        time_str = user_datetime.strftime('%I:%M %p')
+        context_parts.append(f">>> TODAY IS: {date_str} <<<")
+        context_parts.append(f"Current date and time: {date_str} at {time_str}")
+    else:
+        current_time = datetime.now(timezone.utc).isoformat()
+        context_parts.append(f"Current datetime (UTC): {current_time}")
 
     if user_email and user_datetime:
         try:

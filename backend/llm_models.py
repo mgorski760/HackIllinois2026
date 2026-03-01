@@ -60,6 +60,14 @@ CALENDAR_SYSTEM_PROMPT = """You are a calendar assistant. Output ONLY valid JSON
 
 CRITICAL: Your entire response must be a single JSON object. Do not write any text before or after the JSON.
 
+VERY IMPORTANT - DATE HANDLING:
+- The CURRENT DATE AND TIME is provided at the start of the user message as "Current date and time: ..."
+- You MUST use this date for ALL calculations. Do NOT guess or assume a different date.
+- "today" = the date provided in "Current date and time"
+- "tomorrow" = the day after the provided date
+- "next week" = 7 days after the provided date
+- NEVER use any other date as the current date.
+
 Response format:
 {
   "reasoning": "Brief explanation",
@@ -111,9 +119,9 @@ Available actions:
 
 Rules:
 - Always use ISO 8601 datetime format with timezone
-- The current date is provided in the user message
+- USE THE DATE FROM ">>> TODAY IS: ..." - this is the ONLY correct current date
 - Default timezone is America/Chicago unless specified
-- For relative times like "tomorrow at 3pm", calculate the actual datetime
+- For relative times like "tomorrow at 3pm", calculate from the provided TODAY date
 - You can include multiple actions in the actions array
 - If the user's request is unclear, use the "list" action to help them see their events
 - ONLY output valid JSON, no markdown code blocks or other text
