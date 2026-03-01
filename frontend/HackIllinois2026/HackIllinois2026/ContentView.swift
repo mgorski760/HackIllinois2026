@@ -23,12 +23,18 @@ struct ContentView: View {
 
     var body: some View {
         NavigationStack {
-            CalendarInterfaceView(viewModel: viewModel)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background {
-                    LinearGradient(colors: [Color.clear, Color(uiColor: .blue).opacity(0.1)], startPoint: .top, endPoint: .bottom)
-                        .ignoresSafeArea()
+            CalendarInterfaceView(
+                viewModel: viewModel,
+                currentPrompt: currentPrompt,
+                onSuggestionTapped: { prompt in
+                    currentPrompt = prompt
                 }
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background {
+                LinearGradient(colors: [Color.clear, Color(uiColor: .blue).opacity(0.1)], startPoint: .top, endPoint: .bottom)
+                    .ignoresSafeArea()
+            }
         }
         .safeAreaBar(edge: .bottom) { toolbar }
         .calendarWidget(isExpanded: $isCalendarExpanded, animation: expandAnimation)

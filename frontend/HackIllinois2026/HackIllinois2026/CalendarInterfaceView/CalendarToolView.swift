@@ -4,6 +4,8 @@ import FoundationModels
 struct CalendarInterfaceView: View {
 
     var viewModel: CalendarViewModel
+    var currentPrompt: String = ""
+    var onSuggestionTapped: ((String) -> Void)?
 
     var body: some View {
         messageList
@@ -15,56 +17,64 @@ struct CalendarInterfaceView: View {
 
     private var messageList: some View {
         ScrollViewReader { proxy in
-            Group {
-                if viewModel.messages.isEmpty && !viewModel.isRunning {
-                    VStack {
-                        Image(systemName: "sparkles")
-                            .font(.system(size: 100))
-                            .foregroundStyle(.secondary)
-                            .foregroundStyle(
-                                LinearGradient(colors: [
-                                    Color(.systemRed),
-                                    Color(.systemOrange),
-                                    Color(.systemYellow),
-                                    Color(.systemGreen),
-                                    Color(.systemTeal),
-                                    Color(.systemBlue),
-                                    Color(.systemIndigo),
-                                    Color(.systemPurple)
-                                ], startPoint: .topLeading, endPoint: .bottomTrailing)
-                            )
-                            .padding()
-                    }
-                    .padding(.top, 250)
-                    .padding(.bottom, 40)
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 4) {
-                            ForEach(viewModel.messages) { message in
-                                MessageBubble(message: message)
-                                    .id(message.id)
-                            }
-                            if viewModel.isRunning {
-                                VStack(alignment: .leading, spacing: 6) {
-                                    ForEach(viewModel.agentActivity) { event in
-                                        AgentActivityRow(event: event)
-                                            .transition(.move(edge: .bottom).combined(with: .opacity))
-                                    }
-                                    if !viewModel.streamingContent.isEmpty {
-                                        StreamingBubble(text: viewModel.streamingContent)
-                                    } else {
-                                        TypingIndicator()
-                                    }
-                                }
-                                .id("typing")
-                                .animation(.easeOut(duration: 0.2), value: viewModel.agentActivity.count)
-                            }
+            ZStack(alignment: .bottomLeading) {
+                Group {
+                    if viewModel.messages.isEmpty && !viewModel.isRunning {
+                        VStack {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 100))
+                                .foregroundStyle(.secondary)
+                                .foregroundStyle(
+                                    LinearGradient(colors: [
+                                        Color(.systemRed),
+                                        Color(.systemOrange),
+                                        Color(.systemYellow),
+                                        Color(.systemGreen),
+                                        Color(.systemTeal),
+                                        Color(.systemBlue),
+                                        Color(.systemIndigo),
+                                        Color(.systemPurple)
+                                    ], startPoint: .topLeading, endPoint: .bottomTrailing)
+                                )
+                                .padding()
                         }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 16)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    } else {
+                        ScrollView {
+                            LazyVStack(spacing: 4) {
+                                ForEach(viewModel.messages) { message in
+                                    MessageBubble(message: message)
+                                        .id(message.id)
+                                }
+                                if viewModel.isRunning {
+                                    VStack(alignment: .leading, spacing: 6) {
+                                        ForEach(viewModel.agentActivity) { event in
+                                            AgentActivityRow(event: event)
+                                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                                        }
+                                        if !viewModel.streamingContent.isEmpty {
+                                            StreamingBubble(text: viewModel.streamingContent)
+                                        } else {
+                                            TypingIndicator()
+                                        }
+                                    }
+                                    .id("typing")
+                                    .animation(.easeOut(duration: 0.2), value: viewModel.agentActivity.count)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 16)
+                        }
+                        .contentMargins(.top, 300, for: .scrollContent)
+                        .contentMargins(.bottom, 70, for: .scrollContent)
                     }
-                    .contentMargins(.top, 300, for: .scrollContent)
-                    .contentMargins(.bottom, 70, for: .scrollContent)
+                }
+                
+                // Suggestion bubbles at bottom left
+                if viewModel.messages.isEmpty && !viewModel.isRunning && currentPrompt.isEmpty, let onSuggestionTapped {
+                    SuggestionPromptsView(onPromptTapped: onSuggestionTapped)
+                        .padding(.leading, 16)
+                        .padding(.bottom, 90)
                 }
             }
             .onChange(of: viewModel.messages.count) { _, _ in

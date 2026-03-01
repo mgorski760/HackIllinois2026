@@ -72,6 +72,11 @@ final class CalendarViewModel {
         }
 
         let prompt = """
+        The user's current time zone is \(TimeZone.current.identifier).
+        The user's current locale identifier is \(Locale.current.identifier).
+        The current local date and time is \(formattedCurrentDate()).
+        Use this information when interpreting relative dates like "today" or "tomorrow".
+        
         The following is text from an image I scanned, add all relevant dated events to my calendar and ignore the rest:
         \(recognizedText)
         """
@@ -105,6 +110,11 @@ final class CalendarViewModel {
         }
 
         let prompt = """
+        The user's current time zone is \(TimeZone.current.identifier).
+        The user's current locale identifier is \(Locale.current.identifier).
+        The current local date and time is \(formattedCurrentDate()).
+        Use this information when interpreting relative dates like "today" or "tomorrow".
+        
         The following is text extracted from a PDF document. Add all relevant dated events to my calendar and ignore the rest:
         \(text)
         """
