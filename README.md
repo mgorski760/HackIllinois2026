@@ -1,5 +1,11 @@
 # Planwise 📱
 
+<p align="center">
+  <img src="assets/1.png" height="400"/>
+  <img src="assets/5.png" height="400"/>
+  <img src="assets/4.png" height="400"/>
+</p>
+
 ## Inspiration
 Technological development within the industry has accelerated substantially in recent years, and the velocity of work has never been faster. Yet despite all this progress, bottlenecks have somehow gotten worse - professionals and everyday people alike are still stuck carving out time for workflow optimizations and building systems just to keep up with their own preferences. Enough is enough. It's time for technology to actually do the boring stuff for you. That's where Planwise comes in. We take care of your schedule so you can get back to doing the things that actually excite you.
 
